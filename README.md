@@ -152,11 +152,21 @@ native Linux commands. Consider a file called `purge`:
 #!/bin/twx
 
 // This is JavaScript!
-logger.info("Will purge DataTable " + name);
+if (!name) {
+    throw "Which DataTable should I purge?";
+}
+
+logger.info("I will purge DataTable " + name);
+
 if (Things[name]) {
-    Things[name].PurgeData();
+    let t = Things[name];
+    if (t.IsDerivedFromTemplate({ thingTemplateName: "DataTable" })) {
+        t.PurgeDataTableEntries();
+    } else {
+        throw name + " is not a DataTable";
+    }
 } else {
-    throw "DataTable " + name + " not found!";
+    throw "I couldn't find a Thing called " + name;
 }
 ```
 
