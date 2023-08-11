@@ -156,12 +156,11 @@ if (!name) {
     throw "Which DataTable should I purge?";
 }
 
-logger.info("I will purge DataTable " + name);
-
 if (Things[name]) {
     let t = Things[name];
     if (t.IsDerivedFromTemplate({ thingTemplateName: "DataTable" })) {
         t.PurgeDataTableEntries();
+        logger.warn("Purged DataTable " + name);
     } else {
         throw name + " is not a DataTable";
     }
