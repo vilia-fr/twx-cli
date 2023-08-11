@@ -1,6 +1,11 @@
 # ThingWorx CLI
 
-This is a Bash script to simplify your daily ThingWorx DevOps hurdles.
+This is a Bash script to simplify your daily ThingWorx DevOps hurdles. It
+was tested on
+
+- Ubuntu Linux 22.04
+- Alpine Linux 3.14
+- GitBash on Windows 10
 
 ## Configure
 
