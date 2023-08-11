@@ -18,7 +18,7 @@ TWX_ADMIN_USER="Administrator"
 TWX_ADMIN_PASSWORD="secret"
 ```
 
-Put this script on the system `PATH`.
+Put `twx` script on the system `PATH`.
 
 ## Usage
 
