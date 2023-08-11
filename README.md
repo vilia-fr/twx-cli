@@ -151,6 +151,7 @@ native Linux commands. Consider a file called `purge`:
 ```javascript
 #!/bin/twx
 
+// This is JavaScript!
 logger.info("Will purge DataTable " + name);
 if (Things[name]) {
     Things[name].PurgeData();
