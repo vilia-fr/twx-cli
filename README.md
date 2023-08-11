@@ -93,7 +93,8 @@ twx call EntityServices/CreateThing -r -pname=MyThing -pthingTemplateName=Generi
 
 ### Executing ThingWorx code
 
-JavaScript files are wrapped in a `Run` service on a `Temp-<UUID>`
+In `eval` mode, we need to provide a JavaScript file as a `twx` parameter.
+Those JavaScript files are wrapped in a `Run` service on a `Temp-<UUID>`
 GenericThing. This Thing is imported, the service is executed, and the
 Thing is then deleted, regardless of the service execution status.
 
