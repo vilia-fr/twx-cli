@@ -29,6 +29,7 @@ import() {
             echo "Upload success"
         elif [ $HTTP_STATUS_CODE_UPLOAD -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Couldn't upload $INPUT_NAME, http code ${HTTP_STATUS_CODE_UPLOAD}"
+            exit 1
         fi
         HTTP_STATUS_CODE_UNZIP=$(
             curl -X POST --write-out %{http_code} --silent --output /dev/null "$URL/Things/SystemRepository/Services/ExtractZipArchive" \
@@ -44,6 +45,7 @@ import() {
             echo "Unzip success"
         elif [ $HTTP_STATUS_CODE_UNZIP -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Couldn't unzip $INPUT_NAME, http code ${HTTP_STATUS_CODE_UNZIP}"
+            exit 1
         fi
         HTTP_STATUS_CODE_IMPORT=$(
             curl -X POST --write-out %{http_code} --silent --output /dev/null "$URL/Resources/SourceControlFunctions/Services/ImportSourceControlledEntities" \
@@ -57,6 +59,7 @@ import() {
             echo "Import success"
         elif [ $HTTP_STATUS_CODE_IMPORT -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Couldn't import $INPUT_NAME, http code ${HTTP_STATUS_CODE_IMPORT}"
+            exit 1
         fi
         HTTP_STATUS_CODE_DELETE=$(
             curl -X POST --write-out %{http_code} --silent --output /dev/null "$URL/Things/SystemRepository/Services/DeleteFolder" \
@@ -70,6 +73,7 @@ import() {
             echo "Delete folder success"
         elif [ $HTTP_STATUS_CODE_DELETE -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Couldn't delete $INPUT_NAME, http code ${HTTP_STATUS_CODE_DELETE}"
+            exit 1
         fi
 
         if (( $HTTP_STATUS_CODE_UPLOAD != 200 &&
@@ -77,6 +81,7 @@ import() {
             $HTTP_STATUS_CODE_IMPORT != 200 &&
             $HTTP_STATUS_CODE_DELETE != 200 )); then
             echo "Fail"
+            exit 1
         else 
             echo "Success"
         fi
@@ -90,8 +95,10 @@ import() {
             echo "Success"
         elif [$HTTP_STATUS_CODE != "success"] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Couldn't import $INPUT_NAME, http code ${HTTP_STATUS_CODE}"
+            exit 1
         else
             echo "Fail"
+            exit 1
         fi
     fi
 
@@ -117,8 +124,10 @@ importExt() {
             else
                 if [ $VERBOSE_CONSTANT = true ]; then
                     echo "Error installing extension $zip_file, error message: $REPORT_MESSAGE"
+                    exit 1
                 else
                     echo "Fail"
+                    exit 1
                 fi
             fi
         done
@@ -135,8 +144,10 @@ importExt() {
         else
             if [ $VERBOSE_CONSTANT = true ]; then
                 echo "Error installing extension $zip_file, error message: $REPORT_MESSAGE"
+                exit 1
             else
                 echo "Fail"
+                exit 1
             fi
         fi
     fi
@@ -197,8 +208,10 @@ callService() {
         echo "Success"
     elif [ $HTTP_STATUS -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
         echo "Couldn't import $INPUT_NAME, error: $HTTP_BODY"
+        exit 1
     else 
         echo "Fail"
+        exit 1
     fi
 }
 
@@ -327,7 +340,6 @@ option  -v                      -       Using this option allows user to see mor
 
 if [ $# -eq 0 ]; then
     help_info
-    exit 1
 fi
 
 VERBOSE_CONSTANT=false
