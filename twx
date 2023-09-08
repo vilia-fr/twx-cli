@@ -1,3 +1,322 @@
 #!/bin/bash
+source ~/.thingworx.conf
+import() {
 
-echo "Here will be dragons"
+    INPUT_NAME="$1"
+    if [ -d "$INPUT_NAME" ]; then
+
+        # If input is a directory, create a temporary zip file
+        TEMP_ZIP=$(mktemp -u).zip
+        ZIP_NAME=$(basename "$TEMP_ZIP" | sed 's/^tmp\.//' | sed 's/\.zip$//')
+        TEMP_ZIP="$ZIP_NAME.zip"
+        ROOT_FOLDER=$(basename "$INPUT_NAME")
+
+        zip -r "$TEMP_ZIP" "$ROOT_FOLDER"/*.xml
+
+        FOLDER_NAME="tmp-${ZIP_NAME}"
+        URL="$TWX_URL"
+
+        HTTP_STATUS_CODE_UPLOAD=$(
+            curl -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
+                -F "upload-repository=SystemRepository" \
+                -F "upload-path=$ZIP_NAME" \
+                -F "upload-submit=Upload" \
+                -F "file=@$TEMP_ZIP;type=application/x-zip-compressed" \
+                --write-out %{http_code} --silent --output /dev/null "$URL/FileRepositoryUploader"
+        )
+
+        if [ $HTTP_STATUS_CODE_UPLOAD -eq 200 ]; then
+            echo "Success"
+        else
+            echo "Couldn't upload $INPUT_NAME, http code ${HTTP_STATUS_CODE_UPLOAD}"
+        fi
+        HTTP_STATUS_CODE_UNZIP=$(
+            curl -X POST --write-out %{http_code} --silent --output /dev/null "$URL/Things/SystemRepository/Services/ExtractZipArchive" \
+                -H "Content-Type: application/json" \
+                -H "Accept: application/json" \
+                -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
+                -d "{ \
+				\"path\": \"/$FOLDER_NAME\", \"zipFileName\": \"/${ZIP_NAME}/${TEMP_ZIP}\" }"
+
+        )
+
+        if [ $HTTP_STATUS_CODE_UNZIP -eq 200 ]; then
+            echo "Unzip success"
+        else
+            echo "Couldn't unzip $INPUT_NAME, http code ${HTTP_STATUS_CODE_UNZIP}"
+        fi
+        HTTP_STATUS_CODE_IMPORT=$(
+            curl -X POST --write-out %{http_code} --silent --output /dev/null "$URL/Resources/SourceControlFunctions/Services/ImportSourceControlledEntities" \
+                -H "Content-Type: application/json" \
+                -H "Accept: application/json" \
+                -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
+                -d "{ \
+				\"path\": \"/$FOLDER_NAME/$ROOT_FOLDER\", \"repositoryName\": \"SystemRepository\" }"
+        )
+        if [ $HTTP_STATUS_CODE_IMPORT -eq 200 ]; then
+            echo "Import success"
+        else
+            echo "Couldn't import $INPUT_NAME, http code ${HTTP_STATUS_CODE_IMPORT}"
+        fi
+        HTTP_STATUS_CODE_DELETE=$(
+            curl -X POST --write-out %{http_code} --silent --output /dev/null "$URL/Things/SystemRepository/Services/DeleteFolder" \
+                -H "Content-Type: application/json" \
+                -H "Accept: application/json" \
+                -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
+                -d "{ \
+				\"path\": \"/$ZIP_NAME\" }"
+        )
+        if [ $HTTP_STATUS_CODE_DELETE -eq 200 ]; then
+            echo "Delete folder success"
+        else
+            echo "Couldn't delete $INPUT_NAME, http code ${HTTP_STATUS_CODE_DELETE}"
+        fi
+        rm "$TEMP_ZIP"
+
+    else
+        URL="$TWX_URL/Importer?purpose=import"
+        echo "$d"
+        HTTP_STATUS_CODE=$(curl POST -s -F "file=@$INPUT_NAME" -H "appKey:$TWX_APPKEY" -H "Accept: text/xml" -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" $URL)
+        if [ $HTTP_STATUS_CODE == "success" ]; then
+            echo "Success"
+        else
+            echo "Couldn't import $INPUT_NAME, http code ${HTTP_STATUS_CODE}"
+        fi
+    fi
+    local EXIT_CODE=$?
+
+}
+
+importExt() {
+
+    INPUT_NAME="$1"
+    URL=$"$TWX_URL/ExtensionPackageUploader?purpose=import&validate=false"
+
+    if [ -d "$INPUT_NAME" ]; then
+
+        for zip_file in $(find "$INPUT_NAME" -type f -name "*.zip" | sort); do
+
+            RESPONSE=$(curl -X POST -D -s -F "file=@$zip_file" -H "appKey:$TWX_APPKEY" -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" -write-out %{http_code} --silent --output /dev/null "$URL")
+            REPORT_MESSAGE=$(echo "$RESPONSE" | jq -r '.rows[0].validate.rows[0].reportMessage')
+
+            if [ "$REPORT_MESSAGE" == "Extension is already installed" ]; then
+                exit 0
+                echo "Success"
+            elif [ "$REPORT_MESSAGE" == "" ]; then
+                echo "Success"
+            else
+                echo "Error installing extension $zip_file, error message: $REPORT_MESSAGE"
+            fi
+        done
+
+    else
+
+        RESPONSE=$(curl -X POST -D -s -F "file=@$INPUT_NAME" -H "appKey:$TWX_APPKEY" -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" -write-out %{http_code} --silent --output /dev/null "$URL")
+        REPORT_MESSAGE=$(echo "$RESPONSE" | jq -r '.rows[0].validate.rows[0].reportMessage')
+        if [ "$REPORT_MESSAGE" == "Extension is already installed" ]; then
+            exit 0
+            echo "Success"
+        elif [ "$REPORT_MESSAGE" == "" ]; then
+            echo "Success"
+        else
+            echo "Error installing extension $zip_file, error message: $REPORT_MESSAGE"
+        fi
+    fi
+}
+
+callService() {
+
+    if [ "$1" == "-r" ]; then
+        option="r"
+        shift
+    elif [ "$1" == "-s" ]; then
+        option="s"
+        shift
+
+    fi
+
+    INPUT_NAME="$1"
+    shift
+
+    declare -A options
+
+    if [ $# -gt 0 ]; then
+        for i in "$@"; do
+            if [[ $i =~ ^-p.*= ]]; then
+                OPTION_NAME="${i%=*}"
+                OPTION_NAME="${OPTION_NAME//-/}"
+                OPTION_VALUE="${i#*=}"
+                options["$OPTION_NAME"]="$OPTION_VALUE"
+            fi
+        done
+    fi
+
+    if [ "$option" == "r" ]; then
+        IFS="/" read -r THING_NAME SERVICE_NAME <<<"$INPUT_NAME"
+        HTTP_CODE_RESPONSE=$(
+            curl -X POST -s -w 'HTTPSTATUS:%{http_code}' "$TWX_URL/Resources/$THING_NAME/Services/$SERVICE_NAME" \
+                -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
+                -H "Content-Type: application/json" \
+                -H "Accept: application/json" \
+                -d "$(createJsonBody)"
+        )
+        HTTP_BODY=$(echo $HTTP_CODE_RESPONSE | sed -e 's/HTTPSTATUS\:.*//g')
+        HTTP_STATUS=$(echo $HTTP_CODE_RESPONSE | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+    elif [ "$option" == "s" ]; then
+        IFS="/" read -r THING_NAME SERVICE_NAME <<<"$INPUT_NAME"
+        HTTP_CODE_RESPONSE=$(
+            curl -X POST -s -w 'HTTPSTATUS:%{http_code}' "$TWX_URL/Things/$THING_NAME/Services/$SERVICE_NAME" \
+                -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
+                -H "Content-Type: application/json" \
+                -H "Accept: application/json" \
+                -d "$(createJsonBody)"
+        )
+        HTTP_BODY=$(echo $HTTP_CODE_RESPONSE | sed -e 's/HTTPSTATUS\:.*//g')
+        HTTP_STATUS=$(echo $HTTP_CODE_RESPONSE | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+    fi
+
+    if [ $HTTP_STATUS -eq 200 ]; then
+        echo "Success"
+    else
+        echo "Couldn't import $INPUT_NAME, error: $HTTP_BODY"
+    fi
+}
+
+createJsonBody() {
+    local JSON_BODY="{"
+    for key in "${!options[@]}"; do
+        JSON_KEY="${key:1}"
+        JSON_BODY+="\"$JSON_KEY\":\"${options[$key]}\","
+    done
+    JSON_BODY="${JSON_BODY%,}"
+    JSON_BODY+="}"
+    echo "$JSON_BODY"
+}
+
+executeCode() {
+    XML_TEMPLATE='<?xml version="1.0" encoding="UTF-8"?>
+<Entities build="b1899" majorVersion="9" minorVersion="3" modelPersistenceProviderPackage="PostgresPersistenceProviderPackage" revision="10" schemaVersion="1134" universal="">
+   <Things>
+      <Thing description="" documentationContent="" effectiveThingPackage="ConfiguredThing" enabled="true" homeMashup="" identifier="" inheritedValueStream="" lastModifiedDate="2023-08-29T13:37:37.177Z" name="TempThing" projectName="PTCDefaultProject" published="false" tags="" thingTemplate="GenericThing" valueStream="">
+         <Owner name="Administrator" type="User" />
+         <ThingShape>
+            <ServiceDefinitions>
+               <ServiceDefinition aspect.isAsync="false" category="" description="" isAllowOverride="false" isLocalOnly="false" isOpen="false" isPrivate="false" name="run">
+                  <ResultType baseType="INTEGER" description="" name="result" ordinal="0" />
+                  <ParameterDefinitions>
+                     $input_params
+                  </ParameterDefinitions>
+               </ServiceDefinition>
+            </ServiceDefinitions>
+            <ServiceImplementations>
+               <ServiceImplementation description="" handlerName="Script" name="run">
+                  <ConfigurationTables>
+                     <ConfigurationTable dataShapeName="" description="" isMultiRow="false" name="Script" ordinal="0">
+                        <DataShape>
+                           <FieldDefinitions>
+                              <FieldDefinition baseType="STRING" description="code" name="code" ordinal="0" />
+                           </FieldDefinitions>
+                        </DataShape>
+                        <Rows>
+                           <Row>
+                              <code><![CDATA[$new_value]]></code>
+                           </Row>
+                        </Rows>
+                     </ConfigurationTable>
+                  </ConfigurationTables>
+               </ServiceImplementation>
+            </ServiceImplementations>
+         </ThingShape>
+      </Thing>
+   </Things>
+</Entities>'
+
+    TEMP_FOLDER=$(mktemp -d)
+
+    UPDATE_FILE="$TEMP_FOLDER/temp_upd.xml"
+    if [[ $1 == -* ]]; then
+        read content
+    else
+        content=$(cat "$1")
+        shift
+    fi
+
+    if [[ "$content" =~ ^\#\! ]]; then
+        export new_value=$(echo "$content" | sed '1d')
+    else
+        export new_value="$content"
+    fi
+
+    declare -A options
+    if [ $# -gt 0 ]; then
+        for i in "$@"; do
+            if [[ $i =~ ^-p.*= ]]; then
+                OPTION_NAME="${i%=*}"
+                OPTION_NAME="${OPTION_NAME//-/}"
+                OPTION_NAME="${OPTION_NAME:1}"
+                export input_params+="<FieldDefinition baseType=\"STRING\" description=\"\" name=\"$OPTION_NAME\"/>"
+
+            fi
+        done
+    fi
+
+    echo "$XML_TEMPLATE" | envsubst >"$UPDATE_FILE"
+
+    import "$UPDATE_FILE"
+
+    param_array=()
+
+    if [ $# -eq 0 ]; then
+        callService "-s" "TempThing/run"
+    else
+        for i in "$@"; do
+            param_array+=("$i")
+        done
+
+        callService "-s" "TempThing/run" "${param_array[@]}"
+
+    fi
+
+    callService "-r" "EntityServices/DeleteThing" "-pname=TempThing"
+
+    rm -r "$UPDATE_FILE"
+}
+
+help_info() {
+    echo "Available commands:
+   
+import 	    input_name	   	-	Importing single or multiple entities.
+					As a paramameter accepts a file.xml or directory. 
+				
+importExt   input_name  	- 	Importing single or multiple zip files with extensions.
+					As a paramameter accepts a file.zip or directory. 
+					
+call option input_name  	- 	Calls service or resource from Thingworx.						
+					As a paramameter accepts a ThingName/ServiceName -pParam1=Value1 -pParam2=Value2 			
+	-r	resource call
+	-s	service  call
+	
+eval 	input_name  		-	Execute custom JS code on Thingworx.
+					As a paramameter accepts file.js  -pParam1=Value1 -pParam2=Value2 	
+					If no filename is provided, the script body is taken from stdin."
+}
+
+if [ $# -eq 0 ]; then
+    help_info
+    exit 1
+fi
+
+if [ "$1" == "import" ]; then
+    import "$2"
+elif [ "$1" == "importExt" ]; then
+    importExt "$2"
+elif [ "$1" == "call" ]; then
+    shift
+    callService "$@"
+elif [ "$1" == "eval" ]; then
+    shift
+    executeCode "$@"
+else
+    echo "Invalid option: $1"
+    exit 1
+fi
