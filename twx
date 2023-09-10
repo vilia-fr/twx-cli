@@ -3,13 +3,13 @@ source ~/.thingworx.conf
 import() {
 
     INPUT_NAME="$1"
-    if [ -d "$INPUT_NAME" ]; then
+                 if [ -d "$INPUT_NAME" ]; then
 
         # If input is a directory, create a temporary zip file
         TEMP_ZIP=$(mktemp -u).zip
         ZIP_NAME=$(basename "$TEMP_ZIP" | sed 's/^tmp\.//' | sed 's/\.zip$//')
         TEMP_ZIP="$ZIP_NAME.zip"
-        ROOT_FOLDER=$(basename "$INPUT_NAME")
+       ROOT_FOLDER=$(basename "$INPUT_NAME")
 
         zip -r "$TEMP_ZIP" "$ROOT_FOLDER"/*.xml
 
@@ -89,19 +89,21 @@ import() {
 
     else
         URL="$TWX_URL/Importer?purpose=import"
-        echo "$d"
-        HTTP_STATUS_CODE=$(curl POST -s -F "file=@$INPUT_NAME" -H "appKey:$TWX_APPKEY" -H "Accept: text/xml" -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" $URL)
-        if [ $HTTP_STATUS_CODE == "success" ]; then
+
+        HTTP_CODE_RESPONSE=$(curl POST -s -F "file=@$INPUT_NAME" -H "appKey:$TWX_APPKEY" -H "Accept: text/xml" -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" -w 'HTTPSTATUS:%{http_code}' $URL)
+        HTTP_STATUS=$(echo $HTTP_CODE_RESPONSE | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+        
+        if [ $HTTP_STATUS -eq 200 ]; then
             echo "Success"
-        elif [$HTTP_STATUS_CODE != "success"] && [ $VERBOSE_CONSTANT = true ]; then
-            echo "Couldn't import $INPUT_NAME, http code ${HTTP_STATUS_CODE}"
-            exit 1
+        elif [ $HTTP_STATUS -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
+            echo "Couldn't import $INPUT_NAME, error code: $HTTP_STATUS"
+             exit 1
         else
             echo "Fail"
             exit 1
         fi
     fi
-
+    
 }
 
 importExt() {
@@ -349,9 +351,11 @@ if [ $1 == "-v" ]; then
 fi
 
 if [ "$1" == "import" ]; then
-    import "$2"
-elif [ "$1" == "importExt" ]; then
-    importExt "$2"
+    if [ -d "$2" ] || [ "${2##*.}" == "xml" ]; then
+        import "$2"
+    elif [ "${2##*.}" == "zip" ]; then
+        importExt "$2"
+    fi
 elif [ "$1" == "call" ]; then
     shift
     callService "$@"
