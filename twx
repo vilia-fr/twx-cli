@@ -62,7 +62,7 @@ import() {
 
         if [ $HTTP_STATUS_CODE_UPLOAD -eq 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Upload success"
-            exit 0
+            return 0
         elif [ $HTTP_STATUS_CODE_UPLOAD -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Couldn't upload $INPUT_NAME, http code ${HTTP_STATUS_CODE_UPLOAD}"
             exit 1
@@ -79,7 +79,7 @@ import() {
 
         if [ $HTTP_STATUS_CODE_UNZIP -eq 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Unzip success"
-            exit 0
+            return 0
         elif [ $HTTP_STATUS_CODE_UNZIP -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Couldn't unzip $INPUT_NAME, http code ${HTTP_STATUS_CODE_UNZIP}"
             exit 2
@@ -94,7 +94,7 @@ import() {
         )
         if [ $HTTP_STATUS_CODE_IMPORT -eq 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Import success"
-            exit 0
+            return 0
         elif [ $HTTP_STATUS_CODE_IMPORT -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Couldn't import $INPUT_NAME, http code ${HTTP_STATUS_CODE_IMPORT}"
             exit 3
@@ -109,7 +109,7 @@ import() {
         )
         if [ $HTTP_STATUS_CODE_DELETE -eq 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Delete folder success"
-            exit 0
+            return 0
         elif [ $HTTP_STATUS_CODE_DELETE -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Couldn't delete $INPUT_NAME, http code ${HTTP_STATUS_CODE_DELETE}"
             exit 4
@@ -123,7 +123,7 @@ import() {
             exit 5
         else
             echo "Success"
-            exit 0
+            return 0
         fi
         rm "$TEMP_ZIP"
 
@@ -135,7 +135,7 @@ import() {
 
         if [ $HTTP_STATUS -eq 200 ]; then
             echo "Success"
-            exit 0
+            return 0
         elif [ $HTTP_STATUS -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Couldn't import $INPUT_NAME, error code: $HTTP_STATUS"
             exit 10
@@ -160,7 +160,7 @@ importExt() {
             REPORT_MESSAGE=$(echo "$RESPONSE" | jq -r '.rows[0].validate.rows[0].reportMessage')
 
             if [ "$REPORT_MESSAGE" == "Extension is already installed" ]; then
-                exit 0
+                return 0
                 echo "Success"
             elif [ "$REPORT_MESSAGE" == "" ]; then
                 echo "Success"
@@ -180,11 +180,11 @@ importExt() {
         RESPONSE=$(curl -X POST -s -F "file=@$INPUT_NAME" -H "appKey:$TWX_APPKEY" -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" "$URL")
         REPORT_MESSAGE=$(echo "$RESPONSE" | jq -r '.rows[0].validate.rows[0].reportMessage')
         if [ "$REPORT_MESSAGE" == "Extension is already installed" ]; then
-            exit 0
+            return 0
             echo "Success"
         elif [ "$REPORT_MESSAGE" == "" ]; then
             echo "Success"
-            exit 0
+            return 0
         else
             if [ $VERBOSE_CONSTANT = true ]; then
                 echo "Error installing extension $zip_file, error message: $REPORT_MESSAGE"
@@ -225,32 +225,24 @@ callService() {
     fi
 
     if [ "$option" == "r" ]; then
-        IFS="/" read -r THING_NAME SERVICE_NAME <<<"$INPUT_NAME"
-        HTTP_CODE_RESPONSE=$(
-            curl -X POST -s -w 'HTTPSTATUS:%{http_code}' "$TWX_URL/Resources/$THING_NAME/Services/$SERVICE_NAME" \
-                -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
-                -H "Content-Type: application/json" \
-                -H "Accept: application/json" \
-                -d "$(createJsonBody)"
-        )
-        HTTP_BODY=$(echo $HTTP_CODE_RESPONSE | sed -e 's/HTTPSTATUS\:.*//g')
-        HTTP_STATUS=$(echo $HTTP_CODE_RESPONSE | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+        option="Resources"
     elif [ "$option" == "s" ]; then
-        IFS="/" read -r THING_NAME SERVICE_NAME <<<"$INPUT_NAME"
-        HTTP_CODE_RESPONSE=$(
-            curl -X POST -s -w 'HTTPSTATUS:%{http_code}' "$TWX_URL/Things/$THING_NAME/Services/$SERVICE_NAME" \
-                -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
-                -H "Content-Type: application/json" \
-                -H "Accept: application/json" \
-                -d "$(createJsonBody)"
-        )
-        HTTP_BODY=$(echo $HTTP_CODE_RESPONSE | sed -e 's/HTTPSTATUS\:.*//g')
-        HTTP_STATUS=$(echo $HTTP_CODE_RESPONSE | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+        option="Things"
     fi
+
+    IFS="/" read -r THING_NAME SERVICE_NAME <<<"$INPUT_NAME"
+    HTTP_CODE_RESPONSE=$(
+        curl -X POST -s -w 'HTTPSTATUS:%{http_code}' "$TWX_URL/$option/$THING_NAME/Services/$SERVICE_NAME" \
+            -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            -d "$(createJsonBody)"
+    )
+    HTTP_BODY=$(echo $HTTP_CODE_RESPONSE | sed -e 's/HTTPSTATUS\:.*//g')
+    HTTP_STATUS=$(echo $HTTP_CODE_RESPONSE | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
 
     if [ $HTTP_STATUS -eq 200 ]; then
         echo "Success"
-        exit 0
     elif [ $HTTP_STATUS -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
         echo "Couldn't import $INPUT_NAME, error: $HTTP_BODY"
         exit 1
@@ -275,12 +267,11 @@ executeCode() {
     XML_TEMPLATE='<?xml version="1.0" encoding="UTF-8"?>
 <Entities build="b1899" majorVersion="9" minorVersion="3" modelPersistenceProviderPackage="PostgresPersistenceProviderPackage" revision="10" schemaVersion="1134" universal="">
    <Things>
-      <Thing description="" documentationContent="" effectiveThingPackage="ConfiguredThing" enabled="true" homeMashup="" identifier="" inheritedValueStream="" lastModifiedDate="2023-08-29T13:37:37.177Z" name="TempThing" projectName="PTCDefaultProject" published="false" tags="" thingTemplate="GenericThing" valueStream="">
-         <Owner name="Administrator" type="User" />
+      <Thing enabled="true" name="$TEMP_NAME" thingTemplate="GenericThing">
          <ThingShape>
             <ServiceDefinitions>
-               <ServiceDefinition aspect.isAsync="false" category="" description="" isAllowOverride="false" isLocalOnly="false" isOpen="false" isPrivate="false" name="Run">
-                  <ResultType baseType="INTEGER" description="" name="result" ordinal="0" />
+               <ServiceDefinition name="Run">
+                  <ResultType baseType="INTEGER" name="result" />
                   <ParameterDefinitions>
                      $INPUT_PARAMS
                   </ParameterDefinitions>
@@ -309,9 +300,10 @@ executeCode() {
    </Things>
 </Entities>'
 
-    TEMP_FOLDER=$(mktemp -d)
+    UPDATE_FILE="$(mktemp /tmp/xml-XXXXX).xml"
 
-    UPDATE_FILE="$TEMP_FOLDER/temp_upd.xml"
+    export TEMP_NAME="$(basename "$UPDATE_FILE" | sed 's/.*\///;s/\..*//')"
+
     if [[ $1 == -* ]]; then
         read JS_FILE
     else
@@ -386,7 +378,9 @@ VERBOSE_CONSTANT=false
 if [ "$1" = "-v" ]; then
     shift
     VERBOSE_CONSTANT=true
-elif [ "$1" == "import" ]; then
+fi
+
+if [ "$1" == "import" ]; then
     if [ -d "$2" ] || [ "${2##*.}" == "xml" ]; then
         import "$2"
     elif [ "${2##*.}" == "zip" ]; then
