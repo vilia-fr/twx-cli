@@ -1,15 +1,50 @@
 #!/bin/bash
-source ~/.thingworx.conf
+
+# Check for tools
+TOOLS=("curl" "zip" "unzip" "jq")
+NOT_INSTALLED_TOOLS=()
+
+for tool in "${TOOLS[@]}"; do
+    if ! command -v "$tool" &>/dev/null; then
+        NOT_INSTALLED_TOOLS+=("$tool")
+    fi
+done
+
+if [ ${#NOT_INSTALLED_TOOLS[@]} -gt 0 ]; then
+    echo "Error: The following tools are missing:"
+    for tool in "${NOT_INSTALLED_TOOLS[@]}"; do
+        echo "  - $tool"
+    done
+    exit 1
+fi
+
+# Check for enviroment variables
+if [ ! -z $TWX_APPKEY ] && [ ! -z $TWX_URL ]; then
+    echo "Continuing..."
+else
+    if [ -f ~/.thingworx.conf ]; then
+        source ~/.thingworx.conf
+    fi
+
+    if [ -z "$TWX_APPKEY" ]; then
+        echo "Error: TWX_APPKEY variable is empty. Set TWX_APPKEY variable in  ~/.thingworx.conf file."
+    fi
+
+    if [ -z "$TWX_URL" ]; then
+        echo "Error: TWX_URL variable is empty. Set TWX_URL variable in  ~/.thingworx.conf file."
+    fi
+fi
+
 import() {
 
     INPUT_NAME="$1"
-                 if [ -d "$INPUT_NAME" ]; then
+    if [ -d "$INPUT_NAME" ]; then
 
         # If input is a directory, create a temporary zip file
         TEMP_ZIP=$(mktemp -u).zip
         ZIP_NAME=$(basename "$TEMP_ZIP" | sed 's/^tmp\.//' | sed 's/\.zip$//')
         TEMP_ZIP="$ZIP_NAME.zip"
-       ROOT_FOLDER=$(basename "$INPUT_NAME")
+        ROOT_FOLDER=$(basename "$INPUT_NAME")
 
         zip -r "$TEMP_ZIP" "$ROOT_FOLDER"/*.xml
 
@@ -27,6 +62,7 @@ import() {
 
         if [ $HTTP_STATUS_CODE_UPLOAD -eq 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Upload success"
+            exit 0
         elif [ $HTTP_STATUS_CODE_UPLOAD -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Couldn't upload $INPUT_NAME, http code ${HTTP_STATUS_CODE_UPLOAD}"
             exit 1
@@ -43,9 +79,10 @@ import() {
 
         if [ $HTTP_STATUS_CODE_UNZIP -eq 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Unzip success"
+            exit 0
         elif [ $HTTP_STATUS_CODE_UNZIP -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Couldn't unzip $INPUT_NAME, http code ${HTTP_STATUS_CODE_UNZIP}"
-            exit 1
+            exit 2
         fi
         HTTP_STATUS_CODE_IMPORT=$(
             curl -X POST --write-out %{http_code} --silent --output /dev/null "$URL/Resources/SourceControlFunctions/Services/ImportSourceControlledEntities" \
@@ -57,9 +94,10 @@ import() {
         )
         if [ $HTTP_STATUS_CODE_IMPORT -eq 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Import success"
+            exit 0
         elif [ $HTTP_STATUS_CODE_IMPORT -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Couldn't import $INPUT_NAME, http code ${HTTP_STATUS_CODE_IMPORT}"
-            exit 1
+            exit 3
         fi
         HTTP_STATUS_CODE_DELETE=$(
             curl -X POST --write-out %{http_code} --silent --output /dev/null "$URL/Things/SystemRepository/Services/DeleteFolder" \
@@ -71,19 +109,21 @@ import() {
         )
         if [ $HTTP_STATUS_CODE_DELETE -eq 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Delete folder success"
+            exit 0
         elif [ $HTTP_STATUS_CODE_DELETE -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Couldn't delete $INPUT_NAME, http code ${HTTP_STATUS_CODE_DELETE}"
-            exit 1
+            exit 4
         fi
 
-        if (( $HTTP_STATUS_CODE_UPLOAD != 200 &&
-            $HTTP_STATUS_CODE_UNZIP != 200 &&
-            $HTTP_STATUS_CODE_IMPORT != 200 &&
-            $HTTP_STATUS_CODE_DELETE != 200 )); then
+        if (($HTTP_STATUS_CODE_UPLOAD != 200 && \
+            $HTTP_STATUS_CODE_UNZIP != 200 && \
+            $HTTP_STATUS_CODE_IMPORT != 200 && \
+            $HTTP_STATUS_CODE_DELETE != 200)); then
             echo "Fail"
-            exit 1
-        else 
+            exit 5
+        else
             echo "Success"
+            exit 0
         fi
         rm "$TEMP_ZIP"
 
@@ -92,18 +132,19 @@ import() {
 
         HTTP_CODE_RESPONSE=$(curl POST -s -F "file=@$INPUT_NAME" -H "appKey:$TWX_APPKEY" -H "Accept: text/xml" -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" -w 'HTTPSTATUS:%{http_code}' $URL)
         HTTP_STATUS=$(echo $HTTP_CODE_RESPONSE | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
-        
+
         if [ $HTTP_STATUS -eq 200 ]; then
             echo "Success"
+            exit 0
         elif [ $HTTP_STATUS -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
             echo "Couldn't import $INPUT_NAME, error code: $HTTP_STATUS"
-             exit 1
+            exit 10
         else
             echo "Fail"
-            exit 1
+            exit 10
         fi
     fi
-    
+
 }
 
 importExt() {
@@ -143,13 +184,14 @@ importExt() {
             echo "Success"
         elif [ "$REPORT_MESSAGE" == "" ]; then
             echo "Success"
+            exit 0
         else
             if [ $VERBOSE_CONSTANT = true ]; then
                 echo "Error installing extension $zip_file, error message: $REPORT_MESSAGE"
-                exit 1
+                exit 7
             else
                 echo "Fail"
-                exit 1
+                exit 7
             fi
         fi
     fi
@@ -208,12 +250,13 @@ callService() {
 
     if [ $HTTP_STATUS -eq 200 ]; then
         echo "Success"
+        exit 0
     elif [ $HTTP_STATUS -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
         echo "Couldn't import $INPUT_NAME, error: $HTTP_BODY"
         exit 1
-    else 
+    else
         echo "Fail"
-        exit 1
+        exit 12
     fi
 }
 
@@ -236,15 +279,15 @@ executeCode() {
          <Owner name="Administrator" type="User" />
          <ThingShape>
             <ServiceDefinitions>
-               <ServiceDefinition aspect.isAsync="false" category="" description="" isAllowOverride="false" isLocalOnly="false" isOpen="false" isPrivate="false" name="run">
+               <ServiceDefinition aspect.isAsync="false" category="" description="" isAllowOverride="false" isLocalOnly="false" isOpen="false" isPrivate="false" name="Run">
                   <ResultType baseType="INTEGER" description="" name="result" ordinal="0" />
                   <ParameterDefinitions>
-                     $input_params
+                     $INPUT_PARAMS
                   </ParameterDefinitions>
                </ServiceDefinition>
             </ServiceDefinitions>
             <ServiceImplementations>
-               <ServiceImplementation description="" handlerName="Script" name="run">
+               <ServiceImplementation description="" handlerName="Script" name="Run">
                   <ConfigurationTables>
                      <ConfigurationTable dataShapeName="" description="" isMultiRow="false" name="Script" ordinal="0">
                         <DataShape>
@@ -254,7 +297,7 @@ executeCode() {
                         </DataShape>
                         <Rows>
                            <Row>
-                              <code><![CDATA[$new_value]]></code>
+                              <code><![CDATA[$NEW_VALUE]]></code>
                            </Row>
                         </Rows>
                      </ConfigurationTable>
@@ -270,16 +313,16 @@ executeCode() {
 
     UPDATE_FILE="$TEMP_FOLDER/temp_upd.xml"
     if [[ $1 == -* ]]; then
-        read content
+        read JS_FILE
     else
-        content=$(cat "$1")
+        JS_FILE=$(cat "$1")
         shift
     fi
 
-    if [[ "$content" =~ ^\#\! ]]; then
-        export new_value=$(echo "$content" | sed '1d')
+    if [[ "$JS_FILE" =~ ^\#\! ]]; then
+        export NEW_VALUE=$(echo "$JS_FILE" | sed '1d')
     else
-        export new_value="$content"
+        export NEW_VALUE="$JS_FILE"
     fi
 
     declare -A options
@@ -289,7 +332,7 @@ executeCode() {
                 OPTION_NAME="${i%=*}"
                 OPTION_NAME="${OPTION_NAME//-/}"
                 OPTION_NAME="${OPTION_NAME:1}"
-                export input_params+="<FieldDefinition baseType=\"STRING\" description=\"\" name=\"$OPTION_NAME\"/>"
+                export INPUT_PARAMS+="<FieldDefinition baseType=\"STRING\" description=\"\" name=\"$OPTION_NAME\"/>"
 
             fi
         done
@@ -299,16 +342,16 @@ executeCode() {
 
     import "$UPDATE_FILE"
 
-    param_array=()
+    PARAM_ARRAY=()
 
     if [ $# -eq 0 ]; then
-        callService "-s" "TempThing/run"
+        callService "-s" "TempThing/Run"
     else
         for i in "$@"; do
-            param_array+=("$i")
+            PARAM_ARRAY+=("$i")
         done
 
-        callService "-s" "TempThing/run" "${param_array[@]}"
+        callService "-s" "TempThing/Run" "${PARAM_ARRAY[@]}"
 
     fi
 
@@ -337,20 +380,13 @@ eval 	input_name  		-	Execute custom JS code on Thingworx.
                     
 option  -v                      -       Using this option allows user to see more detailed information about the execution of twx commands"
 
-
 }
 
-if [ $# -eq 0 ]; then
-    help_info
-fi
-
 VERBOSE_CONSTANT=false
-if [ $1 == "-v" ]; then
+if [ "$1" = "-v" ]; then
+    shift
     VERBOSE_CONSTANT=true
-   shift
-fi
-
-if [ "$1" == "import" ]; then
+elif [ "$1" == "import" ]; then
     if [ -d "$2" ] || [ "${2##*.}" == "xml" ]; then
         import "$2"
     elif [ "${2##*.}" == "zip" ]; then
@@ -362,7 +398,7 @@ elif [ "$1" == "call" ]; then
 elif [ "$1" == "eval" ]; then
     shift
     executeCode "$@"
-else
-    echo "Invalid option: $1"
-    exit 1
+elif [ "$#" -eq 0 ]; then
+    help_info
+    exit 0
 fi
