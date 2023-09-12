@@ -39,110 +39,77 @@ import() {
 
     INPUT_NAME="$1"
     if [ -d "$INPUT_NAME" ]; then
-
         # If input is a directory, create a temporary zip file
-        TEMP_ZIP=$(mktemp -u).zip
-        ZIP_NAME=$(basename "$TEMP_ZIP" | sed 's/^tmp\.//' | sed 's/\.zip$//')
+        TEMP_ZIP="$(mktemp -u).zip"
+        ZIP_NAME="$(basename "$TEMP_ZIP" | sed 's/^tmp\.//' | sed 's/\.zip$//')"
         TEMP_ZIP="$ZIP_NAME.zip"
-        ROOT_FOLDER=$(basename "$INPUT_NAME")
+        ROOT_FOLDER="$(basename "$INPUT_NAME")"
 
         zip -r "$TEMP_ZIP" "$ROOT_FOLDER"/*.xml
 
         FOLDER_NAME="tmp-${ZIP_NAME}"
-        URL="$TWX_URL"
 
+        #Upload zip to ThingWorx
         HTTP_STATUS_CODE_UPLOAD=$(
             curl -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
                 -F "upload-repository=SystemRepository" \
                 -F "upload-path=$ZIP_NAME" \
                 -F "upload-submit=Upload" \
                 -F "file=@$TEMP_ZIP;type=application/x-zip-compressed" \
-                --write-out %{http_code} --silent --output /dev/null "$URL/FileRepositoryUploader"
+                --write-out %{http_code} $HTTP_OPTION --output /dev/null "$TWX_URL/FileRepositoryUploader"
         )
 
-        if [ $HTTP_STATUS_CODE_UPLOAD -eq 200 ] && [ $VERBOSE_CONSTANT = true ]; then
-            echo "Upload success"
-            return 0
-        elif [ $HTTP_STATUS_CODE_UPLOAD -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
-            echo "Couldn't upload $INPUT_NAME, http code ${HTTP_STATUS_CODE_UPLOAD}"
+        if [ $HTTP_STATUS_CODE_UPLOAD -eq 200 ]; then
+            if [ $VERBOSE_CONSTANT = true ]; then
+                echo "Upload success,  http code ${HTTP_STATUS_CODE_UPLOAD}"
+            fi
+        else
+            if [ $VERBOSE_CONSTANT = true ]; then
+                echo "Couldn't upload $INPUT_NAME, http code ${HTTP_STATUS_CODE_UPLOAD}"
+            fi
+            echo "Fail"
             exit 1
         fi
-        HTTP_STATUS_CODE_UNZIP=$(
-            curl -X POST --write-out %{http_code} --silent --output /dev/null "$URL/Things/SystemRepository/Services/ExtractZipArchive" \
-                -H "Content-Type: application/json" \
-                -H "Accept: application/json" \
-                -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
-                -d "{ \
-				\"path\": \"/$FOLDER_NAME\", \"zipFileName\": \"/${ZIP_NAME}/${TEMP_ZIP}\" }"
 
-        )
-
-        if [ $HTTP_STATUS_CODE_UNZIP -eq 200 ] && [ $VERBOSE_CONSTANT = true ]; then
-            echo "Unzip success"
-            return 0
-        elif [ $HTTP_STATUS_CODE_UNZIP -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
-            echo "Couldn't unzip $INPUT_NAME, http code ${HTTP_STATUS_CODE_UNZIP}"
-            exit 2
-        fi
-        HTTP_STATUS_CODE_IMPORT=$(
-            curl -X POST --write-out %{http_code} --silent --output /dev/null "$URL/Resources/SourceControlFunctions/Services/ImportSourceControlledEntities" \
-                -H "Content-Type: application/json" \
-                -H "Accept: application/json" \
-                -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
-                -d "{ \
-				\"path\": \"/$FOLDER_NAME/$ROOT_FOLDER\", \"repositoryName\": \"SystemRepository\" }"
-        )
-        if [ $HTTP_STATUS_CODE_IMPORT -eq 200 ] && [ $VERBOSE_CONSTANT = true ]; then
-            echo "Import success"
-            return 0
-        elif [ $HTTP_STATUS_CODE_IMPORT -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
-            echo "Couldn't import $INPUT_NAME, http code ${HTTP_STATUS_CODE_IMPORT}"
-            exit 3
-        fi
-        HTTP_STATUS_CODE_DELETE=$(
-            curl -X POST --write-out %{http_code} --silent --output /dev/null "$URL/Things/SystemRepository/Services/DeleteFolder" \
-                -H "Content-Type: application/json" \
-                -H "Accept: application/json" \
-                -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
-                -d "{ \
-				\"path\": \"/$ZIP_NAME\" }"
-        )
-        if [ $HTTP_STATUS_CODE_DELETE -eq 200 ] && [ $VERBOSE_CONSTANT = true ]; then
-            echo "Delete folder success"
-            return 0
-        elif [ $HTTP_STATUS_CODE_DELETE -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
-            echo "Couldn't delete $INPUT_NAME, http code ${HTTP_STATUS_CODE_DELETE}"
-            exit 4
-        fi
-
-        if (($HTTP_STATUS_CODE_UPLOAD != 200 && \
-            $HTTP_STATUS_CODE_UNZIP != 200 && \
-            $HTTP_STATUS_CODE_IMPORT != 200 && \
-            $HTTP_STATUS_CODE_DELETE != 200)); then
-            echo "Fail"
-            exit 5
-        else
-            echo "Success"
-            return 0
-        fi
         rm "$TEMP_ZIP"
+        
+        #Extract zip
+        callService "-s" "SystemRepository/ExtractZipArchive" "-ppath=$FOLDER_NAME" "-pzipFileName=${ZIP_NAME}/${TEMP_ZIP}"
+        
+        #Import entities
+        callService "-r" "SourceControlFunctions/ImportSourceControlledEntities" "-ppath=$FOLDER_NAME/$ROOT_FOLDER" "-prepositoryName=SystemRepository"
+
+        #Delete folder
+        callService "-s" "SystemRepository/DeleteFolder" "-ppath=$ZIP_NAME"
 
     else
+        #Import single entity
         URL="$TWX_URL/Importer?purpose=import"
 
-        HTTP_CODE_RESPONSE=$(curl POST -s -F "file=@$INPUT_NAME" -H "appKey:$TWX_APPKEY" -H "Accept: text/xml" -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" -w 'HTTPSTATUS:%{http_code}' $URL)
+        HTTP_CODE_RESPONSE=$(
+            curl POST $HTTP_OPTION -F "file=@$INPUT_NAME" \
+                -H "appKey:$TWX_APPKEY" \
+                -H "Accept: text/xml" \
+                -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" \
+                -w 'HTTPSTATUS:%{http_code}' $URL
+        )
+
         HTTP_STATUS=$(echo $HTTP_CODE_RESPONSE | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
 
         if [ $HTTP_STATUS -eq 200 ]; then
-            echo "Success"
-            return 0
-        elif [ $HTTP_STATUS -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
-            echo "Couldn't import $INPUT_NAME, error code: $HTTP_STATUS"
-            exit 10
+            if [ $VERBOSE_CONSTANT = true ]; then
+                echo "Upload success, http code ${HTTP_STATUS}"
+            else
+                echo "Success"
+            fi
         else
+            if [ $VERBOSE_CONSTANT = true ]; then
+                echo "Couldn't upload $INPUT_NAME, http code ${HTTP_STATUS}"
+            fi
             echo "Fail"
-            exit 10
+            exit 2
         fi
+
     fi
 
 }
@@ -152,49 +119,28 @@ importExt() {
     INPUT_NAME="$1"
     URL=$"$TWX_URL/ExtensionPackageUploader?purpose=import&validate=false"
 
-    if [ -d "$INPUT_NAME" ]; then
+    RESPONSE=$(
+        curl -X POST $HTTP_OPTION -F "file=@$INPUT_NAME" \
+            -H "appKey:$TWX_APPKEY" \
+            -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" "$URL"
+    )
 
-        for zip_file in $(find "$INPUT_NAME" -type f -name "*.zip" | sort); do
+    REPORT_MESSAGE=$(echo "$RESPONSE" | jq -r '.rows[0].validate.rows[0].reportMessage')
 
-            RESPONSE=$(curl -X POST -s -F "file=@$zip_file" -H "appKey:$TWX_APPKEY" -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" "$URL")
-            REPORT_MESSAGE=$(echo "$RESPONSE" | jq -r '.rows[0].validate.rows[0].reportMessage')
-
-            if [ "$REPORT_MESSAGE" == "Extension is already installed" ]; then
-                return 0
-                echo "Success"
-            elif [ "$REPORT_MESSAGE" == "" ]; then
-                echo "Success"
-            else
-                if [ $VERBOSE_CONSTANT = true ]; then
-                    echo "Error installing extension $zip_file, error message: $REPORT_MESSAGE"
-                    exit 1
-                else
-                    echo "Fail"
-                    exit 1
-                fi
-            fi
-        done
-
+    if [ "$REPORT_MESSAGE" == "Extension is already installed" ]; then
+        echo "Success"
+    elif [ "$REPORT_MESSAGE" == "" ]; then
+        echo "Success"
     else
-
-        RESPONSE=$(curl -X POST -s -F "file=@$INPUT_NAME" -H "appKey:$TWX_APPKEY" -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" "$URL")
-        REPORT_MESSAGE=$(echo "$RESPONSE" | jq -r '.rows[0].validate.rows[0].reportMessage')
-        if [ "$REPORT_MESSAGE" == "Extension is already installed" ]; then
-            return 0
-            echo "Success"
-        elif [ "$REPORT_MESSAGE" == "" ]; then
-            echo "Success"
-            return 0
+        if [ $VERBOSE_CONSTANT = true ]; then
+            echo "Error installing extension $zip_file, error message: $REPORT_MESSAGE"
+            exit 7
         else
-            if [ $VERBOSE_CONSTANT = true ]; then
-                echo "Error installing extension $zip_file, error message: $REPORT_MESSAGE"
-                exit 7
-            else
-                echo "Fail"
-                exit 7
-            fi
+            echo "Fail"
+            exit 7
         fi
     fi
+
 }
 
 callService() {
@@ -232,7 +178,7 @@ callService() {
 
     IFS="/" read -r THING_NAME SERVICE_NAME <<<"$INPUT_NAME"
     HTTP_CODE_RESPONSE=$(
-        curl -X POST -s -w 'HTTPSTATUS:%{http_code}' "$TWX_URL/$option/$THING_NAME/Services/$SERVICE_NAME" \
+        curl -X POST $HTTP_OPTION -w 'HTTPSTATUS:%{http_code}' "$TWX_URL/$option/$THING_NAME/Services/$SERVICE_NAME" \
             -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
             -H "Content-Type: application/json" \
             -H "Accept: application/json" \
@@ -242,14 +188,19 @@ callService() {
     HTTP_STATUS=$(echo $HTTP_CODE_RESPONSE | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
 
     if [ $HTTP_STATUS -eq 200 ]; then
-        echo "Success"
-    elif [ $HTTP_STATUS -ne 200 ] && [ $VERBOSE_CONSTANT = true ]; then
-        echo "Couldn't import $INPUT_NAME, error: $HTTP_BODY"
-        exit 1
+        if [ $VERBOSE_CONSTANT = true ]; then
+            echo "Success. Response: $HTTP_BODY"
+        else
+            echo "Success"
+        fi
     else
+        if [ $VERBOSE_CONSTANT = true ]; then
+            echo "Couldn't import $INPUT_NAME, error: $HTTP_BODY"
+        fi
         echo "Fail"
-        exit 12
+        exit 5
     fi
+
 }
 
 createJsonBody() {
@@ -333,23 +284,23 @@ executeCode() {
     echo "$XML_TEMPLATE" | envsubst >"$UPDATE_FILE"
 
     import "$UPDATE_FILE"
+    rm -r "$UPDATE_FILE"
 
     PARAM_ARRAY=()
 
     if [ $# -eq 0 ]; then
-        callService "-s" "TempThing/Run"
+        callService "-s" "$TEMP_NAME/Run"
     else
         for i in "$@"; do
             PARAM_ARRAY+=("$i")
         done
 
-        callService "-s" "TempThing/Run" "${PARAM_ARRAY[@]}"
+        callService "-s" "$TEMP_NAME/Run" "${PARAM_ARRAY[@]}"
 
     fi
 
-    callService "-r" "EntityServices/DeleteThing" "-pname=TempThing"
+    callService "-r" "EntityServices/DeleteThing" "-pname=$TEMP_NAME"
 
-    rm -r "$UPDATE_FILE"
 }
 
 help_info() {
@@ -378,6 +329,12 @@ VERBOSE_CONSTANT=false
 if [ "$1" = "-v" ]; then
     shift
     VERBOSE_CONSTANT=true
+fi
+
+if [ "$VERBOSE_CONSTANT" = true ]; then
+    HTTP_OPTION="--verbose"
+else
+    HTTP_OPTION="--silent"
 fi
 
 if [ "$1" == "import" ]; then
