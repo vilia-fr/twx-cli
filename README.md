@@ -213,3 +213,17 @@ command.
 twx upload ImportDataRepository/data ~/CSVs
 ```
 
+### Downloading files
+
+The opposite of uploading, works for both individual files and directories
+(the files are zipped, downloaded and unzipped in the latter case). The target
+directory is optional. If omitted, `.` is used. Examples:
+
+```bash
+twx download ImportDataRepository/data/history.csv
+less history.csv
+
+twx download ImportDataRepository/data ~/Downloads
+cd ~/Downloads/data
+ls -al
+```
