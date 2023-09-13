@@ -28,10 +28,12 @@ else
 
     if [ -z "$TWX_APPKEY" ]; then
         echo "Error: TWX_APPKEY variable is empty. Set TWX_APPKEY variable in  ~/.thingworx.conf file."
+        exit 2
     fi
 
     if [ -z "$TWX_URL" ]; then
         echo "Error: TWX_URL variable is empty. Set TWX_URL variable in  ~/.thingworx.conf file."
+        exit 2
     fi
 fi
 
@@ -66,6 +68,7 @@ import() {
         else
             if [ $VERBOSE_CONSTANT = true ]; then
                 echo "Couldn't upload $INPUT_NAME, http code ${HTTP_STATUS_CODE_UPLOAD}"
+                exit 1
             fi
             echo "Fail"
             exit 1
@@ -105,13 +108,14 @@ import() {
         else
             if [ $VERBOSE_CONSTANT = true ]; then
                 echo "Couldn't upload $INPUT_NAME, http code ${HTTP_STATUS}"
+                exit 2
             fi
             echo "Fail"
             exit 2
         fi
 
     fi
-
+    exit 0
 }
 
 importExt() {
@@ -125,7 +129,12 @@ importExt() {
             -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" "$URL"
     )
 
-    REPORT_MESSAGE=$(echo "$RESPONSE" | jq -r '.rows[0].validate.rows[0].reportMessage')
+    if [[ $RESPONSE == "Not Acceptable" ]]; then
+        echo "Fail. Not Acceptable"
+        exit 8
+    else
+        REPORT_MESSAGE=$(echo "$RESPONSE" | jq -r '.rows[0].validate.rows[0].reportMessage')
+    fi
 
     if [ "$REPORT_MESSAGE" == "Extension is already installed" ]; then
         echo "Success"
@@ -140,7 +149,7 @@ importExt() {
             exit 7
         fi
     fi
-
+    exit 0
 }
 
 callService() {
@@ -198,11 +207,12 @@ callService() {
     else
         if [ $VERBOSE_CONSTANT = true ]; then
             echo "Couldn't import $INPUT_NAME, error: $HTTP_BODY"
+            exit 5
         fi
         echo "Fail"
         exit 5
     fi
-
+    exit 0
 }
 
 createJsonBody() {
