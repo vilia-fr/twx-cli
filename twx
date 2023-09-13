@@ -72,10 +72,10 @@ import() {
         fi
 
         rm "$TEMP_ZIP"
-        
+
         #Extract zip
         callService "-s" "SystemRepository/ExtractZipArchive" "-ppath=$FOLDER_NAME" "-pzipFileName=${ZIP_NAME}/${TEMP_ZIP}"
-        
+
         #Import entities
         callService "-r" "SourceControlFunctions/ImportSourceControlledEntities" "-ppath=$FOLDER_NAME/$ROOT_FOLDER" "-prepositoryName=SystemRepository"
 
@@ -178,14 +178,16 @@ callService() {
 
     IFS="/" read -r THING_NAME SERVICE_NAME <<<"$INPUT_NAME"
     HTTP_CODE_RESPONSE=$(
-        curl -X POST $HTTP_OPTION -w 'HTTPSTATUS:%{http_code}' "$TWX_URL/$option/$THING_NAME/Services/$SERVICE_NAME" \
+        curl -X POST $HTTP_OPTION -o "response.json" -w '%{http_code}' "$TWX_URL/$option/$THING_NAME/Services/$SERVICE_NAME" \
             -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
             -H "Content-Type: application/json" \
             -H "Accept: application/json" \
             -d "$(createJsonBody)"
     )
-    HTTP_BODY=$(echo $HTTP_CODE_RESPONSE | sed -e 's/HTTPSTATUS\:.*//g')
-    HTTP_STATUS=$(echo $HTTP_CODE_RESPONSE | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+    HTTP_BODY=$(cat response.json)
+    HTTP_STATUS=$HTTP_CODE_RESPONSE
+
+    rm -r "response.json"
 
     if [ $HTTP_STATUS -eq 200 ]; then
         if [ $VERBOSE_CONSTANT = true ]; then
@@ -299,8 +301,15 @@ executeCode() {
 
     fi
 
+    RESULT_BASE_TYPE=$(echo "$HTTP_BODY" | jq -r '.dataShape.fieldDefinitions.result.baseType')
+
+    if [[ -n "$RESULT_BASE_TYPE" && "$RESULT_BASE_TYPE" == "INTEGER" ]]; then
+        EXIT_CODE=$(echo "$HTTP_BODY" | jq -r '.rows[0].result')
+    fi
+
     callService "-r" "EntityServices/DeleteThing" "-pname=$TEMP_NAME"
 
+    exit $EXIT_CODE
 }
 
 help_info() {
