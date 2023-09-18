@@ -68,10 +68,10 @@ import() {
         else
             if [ $VERBOSE_CONSTANT = true ]; then
                 echo "Couldn't upload $INPUT_NAME, http code ${HTTP_STATUS_CODE_UPLOAD}"
-                exit 1
+                exit 3
             fi
             echo "Fail"
-            exit 1
+            exit 3
         fi
 
         rm "$TEMP_ZIP"
@@ -115,7 +115,6 @@ import() {
         fi
 
     fi
-    exit 0
 }
 
 importExt() {
@@ -138,18 +137,18 @@ importExt() {
 
     if [ "$REPORT_MESSAGE" == "Extension is already installed" ]; then
         echo "Success"
+        exit 0
     elif [ "$REPORT_MESSAGE" == "" ]; then
         echo "Success"
     else
         if [ $VERBOSE_CONSTANT = true ]; then
             echo "Error installing extension $zip_file, error message: $REPORT_MESSAGE"
-            exit 7
+            exit 4
         else
             echo "Fail"
-            exit 7
+            exit 4
         fi
     fi
-    exit 0
 }
 
 callService() {
@@ -193,17 +192,13 @@ callService() {
             -H "Accept: application/json" \
             -d "$(createJsonBody)"
     )
+
     HTTP_BODY=$(cat response.json)
     HTTP_STATUS=$HTTP_CODE_RESPONSE
-
     rm -r "response.json"
 
     if [ $HTTP_STATUS -eq 200 ]; then
-        if [ $VERBOSE_CONSTANT = true ]; then
-            echo "Success. Response: $HTTP_BODY"
-        else
-            echo "Success"
-        fi
+        echo "$HTTP_BODY"
     else
         if [ $VERBOSE_CONSTANT = true ]; then
             echo "Couldn't import $INPUT_NAME, error: $HTTP_BODY"
@@ -212,7 +207,6 @@ callService() {
         echo "Fail"
         exit 5
     fi
-    exit 0
 }
 
 createJsonBody() {

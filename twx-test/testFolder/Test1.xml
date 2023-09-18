@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Entities build="b1899" majorVersion="9" minorVersion="3" modelPersistenceProviderPackage="PostgresPersistenceProviderPackage" revision="10" schemaVersion="1134" universal="">
+   <Things>
+      <Thing enabled="true" name="TestXMLThing1" thingTemplate="GenericThing">
+         <ThingShape>
+            <ServiceDefinitions>
+               <ServiceDefinition name="TestService1">
+                  <ResultType baseType="STRING" name="result" />
+                  <ParameterDefinitions>
+                  </ParameterDefinitions>
+               </ServiceDefinition>
+            </ServiceDefinitions>
+            <ServiceImplementations>
+               <ServiceImplementation description="" handlerName="Script" name="TestService1">
+                  <ConfigurationTables>
+                     <ConfigurationTable dataShapeName="" description="" isMultiRow="false" name="Script" ordinal="0">
+                        <DataShape>
+                           <FieldDefinitions>
+                              <FieldDefinition baseType="STRING" description="code" name="code" ordinal="0" />
+                           </FieldDefinitions>
+                        </DataShape>
+                        <Rows>
+                           <Row>
+                              <code><![CDATA[result="test1"]]></code>
+                           </Row>
+                        </Rows>
+                     </ConfigurationTable>
+                  </ConfigurationTables>
+               </ServiceImplementation>
+            </ServiceImplementations>
+         </ThingShape>
+      </Thing>
+   </Things>
+</Entities>
