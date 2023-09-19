@@ -88,7 +88,7 @@ for us, so it shouldn't be an issue.
 twx call Things/MyThing/Initialize
 
 # Calling a service on a Resource - creating a Thing remotely
-twx call Resources/EntityServices/CreateThing -r -pname=MyThing -pthingTemplateName=GenericThing
+twx call Resources/EntityServices/CreateThing -pname=MyThing -pthingTemplateName=GenericThing
 ```
 
 ### Executing ThingWorx code
