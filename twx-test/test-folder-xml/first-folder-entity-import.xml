@@ -1,17 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Entities build="b1899" majorVersion="9" minorVersion="3" modelPersistenceProviderPackage="PostgresPersistenceProviderPackage" revision="10" schemaVersion="1134" universal="">
+<Entities>
    <Things>
-      <Thing enabled="true" name="TestXMLThing" thingTemplate="GenericThing">
+      <Thing enabled="true" name="TMP-Thing-097897" thingTemplate="GenericThing">
          <ThingShape>
             <ServiceDefinitions>
-               <ServiceDefinition name="TestService">
+               <ServiceDefinition name="TestService1">
                   <ResultType baseType="STRING" name="result" />
-                  <ParameterDefinitions>
-                  </ParameterDefinitions>
                </ServiceDefinition>
             </ServiceDefinitions>
             <ServiceImplementations>
-               <ServiceImplementation description="" handlerName="Script" name="TestService">
+               <ServiceImplementation description="" handlerName="Script" name="TestService1">
                   <ConfigurationTables>
                      <ConfigurationTable dataShapeName="" description="" isMultiRow="false" name="Script" ordinal="0">
                         <DataShape>
@@ -21,7 +19,7 @@
                         </DataShape>
                         <Rows>
                            <Row>
-                              <code><![CDATA[result="success"]]></code>
+                              <code><![CDATA[result="test1"]]></code>
                            </Row>
                         </Rows>
                      </ConfigurationTable>
