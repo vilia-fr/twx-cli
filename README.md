@@ -77,7 +77,7 @@ for EXT in *.zip; do twx import $EXT; done
 ### Calling services
 
 The `call` command uses an intuitive syntax for calling services. It supports
-Things and Resources. In the latter case you need to add `-r` parameter.
+any ThingWorx entities, such as Things, Resources, Mashups, Users, etc.
 
 We can provide parameters to this command via `-pname=value` syntax. All
 parameters are considered strings. ThingWorx will coalesce parameter types
@@ -85,10 +85,10 @@ for us, so it shouldn't be an issue.
 
 ```bash
 # A simple no-parameters service call on a Thing
-twx call MyThing/Initialize
+twx call Things/MyThing/Initialize
 
 # Calling a service on a Resource - creating a Thing remotely
-twx call EntityServices/CreateThing -r -pname=MyThing -pthingTemplateName=GenericThing
+twx call Resources/EntityServices/CreateThing -r -pname=MyThing -pthingTemplateName=GenericThing
 ```
 
 ### Executing ThingWorx code
