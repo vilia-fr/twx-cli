@@ -1,8 +1,11 @@
 #!/bin/bash
 
 RED='\033[0;31m'
-GREEN='\033[0;32m'        
+GREEN='\033[0;32m'
 NC='\033[0m' # No Color
+
+CHECK_REPOSITORY_COMMAND='twx call Things/SystemRepository/ListDirectories -ppath=/'
+CHECK_REPOSITORY=$($CHECK_REPOSITORY_COMMAND)
 
 # Execute custom JS code
 RESULT=$(twx eval twx-test/test-eval.js -pname1=Value1)
@@ -27,10 +30,18 @@ if [ $? -ne 5 ]; then
     exit 1
 fi
 
-# Execute custom JS code using piipe
-RESULT=$(echo "result=1+2;" | twx eval - | jq .rows[0].result)
-if [ $RESULT -ne 3 ]; then
+# Execute custom JS code using pipe
+RESULT=$(echo "result=1+2;" | twx eval -)
+if [ $? -ne 3 ]; then
     printf "Eval wrong JS file - ${RED}Fail${NC}: $RESULT\n"
+    exit 1
+fi
+
+# Check delete of testing files
+RESULT=$(twx call Things/SystemRepository/ListDirectories -ppath=/)
+
+if [[ "$RESULT" != "$CHECK_REPOSITORY" ]]; then
+    printf "Delete test entities - ${RED}Fail${NC}\n"
     exit 1
 fi
 

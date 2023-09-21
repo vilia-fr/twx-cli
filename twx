@@ -80,7 +80,7 @@ import() {
         if [ $EXIT_CODE -eq 5 ]; then
             echo "Couldn't extract $INPUT_NAME,"
         fi
-   
+
         #Import entities
         IMPORT_XML=$(callService "Resources/SourceControlFunctions/ImportSourceControlledEntities" "-ppath=$FOLDER_NAME" "-prepositoryName=SystemRepository")
         EXIT_CODE=$?
@@ -98,7 +98,6 @@ import() {
         fi
 
     else
-    set -x
         #Import single entity
         URL="$TWX_URL/Importer?purpose=import"
 
@@ -124,7 +123,6 @@ import() {
         fi
     fi
     return ${EXIT_CODE}
-    set +x
 }
 importExt() {
     local EXIT_CODE=0
@@ -258,7 +256,7 @@ executeCode() {
     UPDATE_FILE="$(mktemp /tmp/xml-XXXXX).xml"
 
     export TEMP_NAME="$(basename "$UPDATE_FILE" | sed 's/.*\///;s/\..*//')"
-
+ 
     if [[ $1 == -* ]]; then
         read JS_FILE
     else
@@ -287,7 +285,7 @@ executeCode() {
     fi
 
     echo "$XML_TEMPLATE" | envsubst >"$UPDATE_FILE"
-
+  
     IMPORT_JS_XML=$(import "$UPDATE_FILE")
     EXIT_CODE=$?
     rm -r "$UPDATE_FILE"
@@ -307,18 +305,22 @@ executeCode() {
             CALL_JS_SERVICE=$(callService "Things/$TEMP_NAME/Run" "${PARAM_ARRAY[@]}")
             EXIT_CODE=$?
         fi
-        if [ $EXIT_CODE -ne 5 ]; then
-            RESULT_BASE_TYPE=$(echo "$HTTP_BODY" | jq -r '.dataShape.fieldDefinitions.result.baseType')
 
+        if [ $EXIT_CODE -ne 5 ]; then
+            RESULT_BASE_TYPE=$(echo "$CALL_JS_SERVICE" | jq -r '.dataShape.fieldDefinitions.result.baseType')
             if [[ -n "$RESULT_BASE_TYPE" && "$RESULT_BASE_TYPE" == "INTEGER" ]]; then
-                EXIT_EVAL_CODE=$(echo "$HTTP_BODY" | jq -r '.rows[0].result')
+                EXIT_EVAL_CODE=$(echo "$CALL_JS_SERVICE" | jq -r '.rows[0].result')
                 EXIT_CODE=$EXIT_EVAL_CODE
             fi
-
+        else
+            echo "Error run .js file $JS_FILE_NAME. Response: $CALL_JS_SERVICE"
         fi
     fi
 
     callService "Resources/EntityServices/DeleteThing" "-pname=$TEMP_NAME" >/dev/null
+
+    echo "$EXIT_CODE"
+    return ${EXIT_CODE}
 }
 
 help_info() {
@@ -339,6 +341,7 @@ option      -v              -       Using this option allows user to see more de
 }
 
 EXIT_CODE=0
+OUTPUT=""
 VERBOSE_CONSTANT=false
 if [ "$1" = "-v" ]; then
     shift
@@ -373,4 +376,5 @@ elif [ "$#" -eq 0 ]; then
     help_info
     exit=0
 fi
+echo "$OUTPUT"
 exit $EXIT_CODE

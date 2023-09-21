@@ -5,6 +5,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 
+CHECK_REPOSITORY_COMMAND='twx call Things/SystemRepository/ListDirectories -ppath=/'
+CHECK_REPOSITORY=$($CHECK_REPOSITORY_COMMAND)
+
 DELETE_COMMAND_ONE='twx call Resources/EntityServices/DeleteThing -pname=TMP-Thing-097897'
 DELETE_COMMAND_TWO='twx call Resources/EntityServices/DeleteThing -pname=TMP-Thing-087634'
 
@@ -20,7 +23,6 @@ if [ $RESULT_ENTITY_ONE -ne 5 ] || [ $RESULT_ENTITY_TWO -ne 5 ]; then
 fi
 
 # Import a test folder
-
 RESULT=$(twx import twx-test/test-folder-xml)
 
 if [ $? -ne 0 ]; then
@@ -59,5 +61,13 @@ fi
 
 $DELETE_COMMAND_ONE >/dev/null
 $DELETE_COMMAND_TWO >/dev/null
+
+# Check delete of testing files
+RESULT=$(twx call Things/SystemRepository/ListDirectories -ppath=/)
+
+if [[ "$RESULT" != "$CHECK_REPOSITORY" ]]; then
+    printf "Delete test entities - ${RED}Fail${NC}\n"
+    exit 1
+fi
 
 printf "Test 3: Importing XML folder - ${GREEN}Success${NC}\n"

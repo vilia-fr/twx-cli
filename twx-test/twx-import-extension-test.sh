@@ -1,6 +1,6 @@
 #!/bin/bash
 
- source ~/.thingworx.conf
+source ~/.thingworx.conf
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -21,7 +21,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 # Call a resource to check if extension imported successfully
-RESULT=$(twx  call Resources/AddCounting/GetAddNumbersWithLoop -ploopCount=1 -psecondNumber=2 -pfirstNumber=2)
+RESULT=$(twx call Resources/AddCounting/GetAddNumbersWithLoop -ploopCount=1 -psecondNumber=2 -pfirstNumber=2)
 
 if [ $? -eq 5 ]; then
     printf "Call test extension resource - ${RED}Fail${NC}: $RESULT\n"
@@ -38,10 +38,10 @@ if [ $? -eq 0 ]; then
 fi
 
 DELETE_EXT=$(curl -X POST -w '%{http_code}' "$TWX_URL/Subsystems/PlatformSubsystem/Services/DeleteExtensionPackage" \
-    -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
-    -H "Content-Type: application/json" \
-    -H "Accept: application/json" \
-    -d '{"packageName":"JavaExtension"}' \
-    )
+        -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
+        -H "Content-Type: application/json" \
+        -H "Accept: application/json" \
+        -d '{"packageName":"JavaExtension"}' \
+)
 
 printf "Test 4: Importing Extension - ${GREEN}Success${NC}\n"
