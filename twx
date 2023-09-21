@@ -40,6 +40,7 @@ fi
 import() {
 
     INPUT_NAME="$1"
+    local EXIT_CODE=0
     if [ -d "$INPUT_NAME" ]; then
         # If input is a directory, create a temporary zip file
         TEMP_ZIP="$(mktemp -u).zip"
@@ -47,7 +48,7 @@ import() {
         TEMP_ZIP="$ZIP_NAME.zip"
         ROOT_FOLDER="$(basename "$INPUT_NAME")"
 
-        zip -jr "$TEMP_ZIP" "$INPUT_NAME"
+        zip $ZIP_OPTION "$TEMP_ZIP" "$INPUT_NAME"
 
         FOLDER_NAME="tmp-${ZIP_NAME}"
 
@@ -66,36 +67,38 @@ import() {
                 echo "Upload success,  http code ${HTTP_STATUS_CODE_UPLOAD}"
             fi
         else
-            if [ $VERBOSE_CONSTANT = true ]; then
-                echo "Couldn't upload $INPUT_NAME, http code ${HTTP_STATUS_CODE_UPLOAD}"
-                exit 3
-            fi
-            echo "Fail"
-            exit 3
+            echo "Couldn't upload $INPUT_NAME, http code ${HTTP_STATUS_CODE_UPLOAD}"
+            EXIT_CODE=3
         fi
 
         rm "$TEMP_ZIP"
 
-        trap 'if [ $? -eq 5 ]; then cleanup; fi' EXIT
-
         #Extract zip
-        callService "Things/SystemRepository/ExtractZipArchive" "-ppath=$FOLDER_NAME" "-pzipFileName=${ZIP_NAME}/${TEMP_ZIP}"
-        if [ $? -eq 5 ]; then
-            cleanup
-            exit 5
-        fi
+        EXTRACT_ZIP=$(callService "Things/SystemRepository/ExtractZipArchive" "-ppath=$FOLDER_NAME" "-pzipFileName=${ZIP_NAME}/${TEMP_ZIP}")
+        EXIT_CODE=$?
 
+        if [ $EXIT_CODE -eq 5 ]; then
+            echo "Couldn't extract $INPUT_NAME,"
+        fi
+   
         #Import entities
-        callService "Resources/SourceControlFunctions/ImportSourceControlledEntities" "-ppath=$FOLDER_NAME" "-prepositoryName=SystemRepository"
-        if [ $? -eq 5 ]; then
-            cleanup
-            exit 5
+        IMPORT_XML=$(callService "Resources/SourceControlFunctions/ImportSourceControlledEntities" "-ppath=$FOLDER_NAME" "-prepositoryName=SystemRepository")
+        EXIT_CODE=$?
+
+        if [ $EXIT_CODE -eq 5 ]; then
+            echo "Couldn't import $INPUT_NAME, response $IMPORT_XML\n"
         fi
 
         #Delete folders
-        cleanup
+        callService "Things/SystemRepository/DeleteFolder" "-ppath=$ZIP_NAME" >/dev/null
+        callService "Things/SystemRepository/DeleteFolder" "-ppath=$FOLDER_NAME" >/dev/null
+
+        if [ $EXIT_CODE -eq 0 ]; then
+            echo "Success"
+        fi
 
     else
+    set -x
         #Import single entity
         URL="$TWX_URL/Importer?purpose=import"
 
@@ -116,59 +119,46 @@ import() {
                 echo "Success"
             fi
         else
-            if [ $VERBOSE_CONSTANT = true ]; then
-                echo "Couldn't upload $INPUT_NAME, http code ${HTTP_STATUS}"
-                exit 2
-            fi
-            echo "Fail"
-            exit 2
+            echo "Couldn't upload $INPUT_NAME, http code ${HTTP_STATUS}"
+            EXIT_CODE=2
         fi
-
     fi
+    return ${EXIT_CODE}
+    set +x
 }
-
-cleanup() {
-    callService "Things/SystemRepository/DeleteFolder" "-ppath=$ZIP_NAME"
-    callService "Things/SystemRepository/DeleteFolder" "-ppath=$FOLDER_NAME"
-}
-
 importExt() {
-
+    local EXIT_CODE=0
     INPUT_NAME="$1"
-    URL=$"$TWX_URL/ExtensionPackageUploader?purpose=import&validate=false"
+    URL="$TWX_URL/ExtensionPackageUploader?purpose=import&validate=false"
 
     RESPONSE=$(
-        curl -X POST $HTTP_OPTION -F "file=@$INPUT_NAME" \
+        curl $HTTP_OPTION -X POST -F "file=@$INPUT_NAME" \
             -H "appKey:$TWX_APPKEY" \
             -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" "$URL"
     )
 
     if [[ $RESPONSE == "Not Acceptable" ]]; then
         echo "Fail. Not Acceptable"
-        exit 8
+        EXIT_CODE=8
+        exit $EXIT_CODE
     else
         REPORT_MESSAGE=$(echo "$RESPONSE" | jq -r '.rows[0].validate.rows[0].reportMessage')
     fi
 
     if [ "$REPORT_MESSAGE" == "Extension is already installed" ]; then
         echo "Success"
-        exit 0
+        EXIT_CODE=0
     elif [ "$REPORT_MESSAGE" == "" ]; then
         echo "Success"
-        exit 0
+        EXIT_CODE=0
     else
-        if [ $VERBOSE_CONSTANT = true ]; then
-            echo "Error installing extension $zip_file, error message: $REPORT_MESSAGE"
-            exit 4
-        else
-            echo "Fail"
-            exit 4
-        fi
+        echo "Error installing extension $zip_file, error message: $REPORT_MESSAGE"
+        EXIT_CODE=4
     fi
 }
 
 callService() {
-
+    local EXIT_CODE=0
     INPUT_NAME="$1"
     shift
 
@@ -201,26 +191,32 @@ callService() {
     if [ $HTTP_STATUS -eq 200 ]; then
         echo "$HTTP_BODY"
     else
-        if [ $VERBOSE_CONSTANT = true ]; then
-            echo "Couldn't import $INPUT_NAME, error: $HTTP_BODY"
-            exit 5
-        fi
-        echo "Fail"
-        exit 5
+        echo "Couldn't import $INPUT_NAME, error: $HTTP_BODY"
+        EXIT_CODE=5
+
     fi
+    return ${EXIT_CODE}
 }
 
 createJsonBody() {
-    local JSON_BODY="{"
+    JSON_BODY="{"
     for key in "${!options[@]}"; do
         JSON_KEY="${key:1}"
-        JSON_BODY+="\"$JSON_KEY\":\"${options[$key]}\","
+        JSON_VALUE=${options[$key]}
+        if jq -e . >/dev/null 2>&1 <<<"${JSON_VALUE}"; then
+            JSON_BODY+="\"$JSON_KEY\":${options[$key]},"
+        else
+            echo
+            JSON_BODY+="\"$JSON_KEY\":\"${options[$key]}\","
+        fi
     done
     JSON_BODY="${JSON_BODY%,}"
     JSON_BODY+="}"
     echo "$JSON_BODY"
 }
+
 executeCode() {
+
     XML_TEMPLATE='<?xml version="1.0" encoding="UTF-8"?>
 <Entities>
    <Things>
@@ -257,6 +253,8 @@ executeCode() {
    </Things>
 </Entities>'
 
+    local EXIT_CODE=0
+    local JS_FILE_NAME="taken from input"
     UPDATE_FILE="$(mktemp /tmp/xml-XXXXX).xml"
 
     export TEMP_NAME="$(basename "$UPDATE_FILE" | sed 's/.*\///;s/\..*//')"
@@ -265,6 +263,7 @@ executeCode() {
         read JS_FILE
     else
         JS_FILE=$(cat "$1")
+        JS_FILE_NAME=$1
         shift
     fi
 
@@ -289,37 +288,43 @@ executeCode() {
 
     echo "$XML_TEMPLATE" | envsubst >"$UPDATE_FILE"
 
-    import "$UPDATE_FILE"
+    IMPORT_JS_XML=$(import "$UPDATE_FILE")
+    EXIT_CODE=$?
     rm -r "$UPDATE_FILE"
 
-    PARAM_ARRAY=()
-
-    if [ $# -eq 0 ]; then
-        callService "Things/$TEMP_NAME/Run"
+    if [ $EXIT_CODE -eq 2 ]; then
+        echo "Error importing XML with .js file $JS_FILE_NAME"
     else
-        for i in "$@"; do
-            PARAM_ARRAY+=("$i")
-        done
+        PARAM_ARRAY=()
+        if [ $# -eq 0 ]; then
+            CALL_JS_SERVICE=$(callService "Things/$TEMP_NAME/Run")
+            EXIT_CODE=$?
+        else
+            for i in "$@"; do
+                PARAM_ARRAY+=("$i")
+            done
 
-        callService "Things/$TEMP_NAME/Run" "${PARAM_ARRAY[@]}"
+            CALL_JS_SERVICE=$(callService "Things/$TEMP_NAME/Run" "${PARAM_ARRAY[@]}")
+            EXIT_CODE=$?
+        fi
+        if [ $EXIT_CODE -ne 5 ]; then
+            RESULT_BASE_TYPE=$(echo "$HTTP_BODY" | jq -r '.dataShape.fieldDefinitions.result.baseType')
 
+            if [[ -n "$RESULT_BASE_TYPE" && "$RESULT_BASE_TYPE" == "INTEGER" ]]; then
+                EXIT_EVAL_CODE=$(echo "$HTTP_BODY" | jq -r '.rows[0].result')
+                EXIT_CODE=$EXIT_EVAL_CODE
+            fi
+
+        fi
     fi
 
-    RESULT_BASE_TYPE=$(echo "$HTTP_BODY" | jq -r '.dataShape.fieldDefinitions.result.baseType')
-
-    if [[ -n "$RESULT_BASE_TYPE" && "$RESULT_BASE_TYPE" == "INTEGER" ]]; then
-        EXIT_CODE=$(echo "$HTTP_BODY" | jq -r '.rows[0].result')
-    fi
-
-    callService "Resources/EntityServices/DeleteThing" "-pname=$TEMP_NAME"
-
-    exit $EXIT_CODE
+    callService "Resources/EntityServices/DeleteThing" "-pname=$TEMP_NAME" >/dev/null
 }
 
 help_info() {
     echo "Available commands:
    
-import 	    input_name	   	-	Importing single, multiple entities or.
+import 	    input_name	   	-	Importing single, multiple entities or extensions.
 					As a paramameter accepts a file.xml, file. zip or directory. 
 
 call        input_name  	- 	Calls service or resource from Thingworx.						
@@ -333,6 +338,7 @@ option      -v              -       Using this option allows user to see more de
 
 }
 
+EXIT_CODE=0
 VERBOSE_CONSTANT=false
 if [ "$1" = "-v" ]; then
     shift
@@ -341,23 +347,30 @@ fi
 
 if [ "$VERBOSE_CONSTANT" = true ]; then
     HTTP_OPTION="--verbose"
+    ZIP_OPTION="-rv"
 else
     HTTP_OPTION="--silent"
+    ZIP_OPTION="-rq"
 fi
 
 if [ "$1" == "import" ]; then
     if [ -d "$2" ] || [ "${2##*.}" == "xml" ]; then
-        import "$2"
+        OUTPUT=$(import $2)
+        EXIT_CODE=$?
     elif [ "${2##*.}" == "zip" ]; then
-        importExt "$2"
+        OUTPUT=$(importExt $2)
+        EXIT_CODE=$?
     fi
 elif [ "$1" == "call" ]; then
     shift
-    callService "$@"
+    OUTPUT=$(callService "$@")
+    EXIT_CODE=$?
 elif [ "$1" == "eval" ]; then
     shift
-    executeCode "$@"
+    OUTPUT=$(executeCode "$@")
+    EXIT_CODE=$?
 elif [ "$#" -eq 0 ]; then
     help_info
-    exit 0
+    exit=0
 fi
+exit $EXIT_CODE

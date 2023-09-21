@@ -29,6 +29,7 @@ if [ $? -eq 5 ]; then
 fi
 
 # Import wrong extension
+
 RESULT=$(twx import twx-test/twx-test-wrong-data-ext.zip)
 
 if [ $? -eq 0 ]; then

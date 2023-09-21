@@ -44,9 +44,8 @@ if [ $? -eq 0 ]; then
 fi
 
 # Import wrong data in XML file
-data="some test data..."
-echo $data >"TestWrongXML.xml"
-RESULT=$(twx import TestWrongXML.xml)
+
+RESULT=$(twx import twx-test/single-wrong-entity-import.xml)
 
 if [ $? -eq 0 ]; then
     printf "Import single XML - ${RED}Fail${NC}\n"

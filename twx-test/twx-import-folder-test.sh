@@ -53,7 +53,6 @@ fi
 RESULT=$(twx import twx-test/test-folder-wrong-xml)
 
 if [ $? -eq 0 ]; then
-    rm -r "TestWrongXML.xml"
     printf "Import wrong folder XML - ${RED}Fail${NC}\n"
     exit 1
 fi

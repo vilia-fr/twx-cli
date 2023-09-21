@@ -7,6 +7,12 @@
                <ServiceDefinition name="TestService">
                   <ResultType baseType="STRING" name="result" />
                </ServiceDefinition>
+               <ServiceDefinition name="testJSON">
+                  <ResultType baseType="JSON" name="result"/>
+                  <ParameterDefinitions>
+                     <FieldDefinition baseType="JSON" name="par"/>
+                  </ParameterDefinitions>
+               </ServiceDefinition>
             </ServiceDefinitions>
             <ServiceImplementations>
                <ServiceImplementation description="" handlerName="Script" name="TestService">
@@ -20,6 +26,22 @@
                         <Rows>
                            <Row>
                               <code><![CDATA[result="success"]]></code>
+                           </Row>
+                        </Rows>
+                     </ConfigurationTable>
+                  </ConfigurationTables>
+               </ServiceImplementation>   
+               <ServiceImplementation description="" handlerName="Script" name="testJSON">
+                  <ConfigurationTables>
+                     <ConfigurationTable dataShapeName="" description="" isMultiRow="false" name="Script" ordinal="0">
+                        <DataShape>
+                           <FieldDefinitions>
+                              <FieldDefinition baseType="STRING" description="code" name="code" ordinal="0"/>
+                           </FieldDefinitions>
+                        </DataShape>
+                        <Rows>
+                           <Row>
+                              <code><![CDATA[result=par;]]></code>
                            </Row>
                         </Rows>
                      </ConfigurationTable>

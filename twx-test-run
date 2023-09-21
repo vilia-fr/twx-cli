@@ -4,22 +4,23 @@ GREEN='\033[0;32m'
 NC='\033[0m' # No Color
 
 # Test 1: Test call function
-twxCallTest.sh
+twx-call-test.sh
 if [ $? -ne 0 ]; then exit 1; fi
+
 # Test 2: Import a single XML file
-twxImportSingleEntityTest.sh
+twx-import-single-entity-test.sh
 if [ $? -ne 0 ]; then exit 1; fi
 
 # Test 3: Import a directory containing XML files
-twxImportFolderTest.sh
+twx-import-folder-test.sh
 if [ $? -ne 0 ]; then exit 1; fi
 
 # Test 4: Import an extension
-twxImportExtensionTest.sh
+twx-import-extension-test.sh
 if [ $? -ne 0 ]; then exit 1; fi
 
 # Test 5: Import a directory containing XML files
-twxEvalTest.sh
+twx-eval-test.sh
 if [ $? -ne 0 ]; then exit 1; fi
 
 printf "All tests complited ${GREEN}successfully${NC}\n"
