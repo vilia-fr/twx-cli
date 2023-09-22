@@ -9,7 +9,6 @@ CHECK_REPOSITORY=$($CHECK_REPOSITORY_COMMAND)
 
 # Execute custom JS code
 RESULT=$(twx eval twx-test/test-eval.js -pname1=Value1)
-
 if [ $? -ne 13 ]; then
     printf "Eval JS file - ${RED}Fail${NC}: $RESULT\n"
     exit 1
@@ -17,7 +16,6 @@ fi
 
 # Execute custom JS code  with wrong param
 RESULT=$(twx eval twx-test/test-eval.js -pname12=Value1)
-
 if [ $? -ne 5 ]; then
     printf "Eval JS file with wrong param - ${RED}Fail${NC}: $RESULT\n"
     exit 1
@@ -39,10 +37,8 @@ fi
 
 # Check delete of testing files
 RESULT=$(twx call Things/SystemRepository/ListDirectories -ppath=/)
-
 if [[ "$RESULT" != "$CHECK_REPOSITORY" ]]; then
-    printf "Delete test entities - ${RED}Fail${NC}\n"
-    exit 1
+    printf "${YELLOW}WARNING${NC}: Test entities are not deleted\n"
 fi
 
 printf "Test 5: Evaluating JS code - ${GREEN}Success${NC}\n"

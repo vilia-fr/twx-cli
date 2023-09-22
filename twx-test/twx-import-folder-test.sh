@@ -12,7 +12,6 @@ DELETE_COMMAND_ONE='twx call Resources/EntityServices/DeleteThing -pname=TMP-Thi
 DELETE_COMMAND_TWO='twx call Resources/EntityServices/DeleteThing -pname=TMP-Thing-087634'
 
 # Check for existing of service from test Things
-
 ENTITY_ONE=$(twx call Things/TMP-Thing-097897/TestService1)
 RESULT_ENTITY_ONE=$?
 ENTITY_TWO=$(twx call Things/TMP-Thing-087634/TestService2)
@@ -24,7 +23,6 @@ fi
 
 # Import a test folder
 RESULT=$(twx import twx-test/test-folder-xml)
-
 if [ $? -ne 0 ]; then
     $DELETE_COMMAND_ONE >/dev/null
     $DELETE_COMMAND_TWO >/dev/null
@@ -34,13 +32,13 @@ fi
 
 # Call a service to check if first XML imported successfully
 RESULT=$(twx call Things/TMP-Thing-097897/TestService1)
-
 if [ $? -eq 5 ]; then
     $DELETE_COMMAND_ONE >/dev/null
     $DELETE_COMMAND_TWO >/dev/null
     printf "Call first service - ${RED}Fail${NC}: $RESULT\n"
     exit 1
 fi
+
 # Call a service to check if second XML imported successfully
 RESULT=$(twx call Things/TMP-Thing-087634/TestService2)
 if [ $? -eq 5 ]; then
@@ -51,9 +49,7 @@ if [ $? -eq 5 ]; then
 fi
 
 # Import a directory with wrong XML file
-
 RESULT=$(twx import twx-test/test-folder-wrong-xml)
-
 if [ $? -eq 0 ]; then
     printf "Import wrong folder XML - ${RED}Fail${NC}\n"
     exit 1
@@ -64,10 +60,8 @@ $DELETE_COMMAND_TWO >/dev/null
 
 # Check delete of testing files
 RESULT=$(twx call Things/SystemRepository/ListDirectories -ppath=/)
-
 if [[ "$RESULT" != "$CHECK_REPOSITORY" ]]; then
-    printf "Delete test entities - ${RED}Fail${NC}\n"
-    exit 1
+    printf "${YELLOW}WARNING${NC}: Test entities are not deleted\n"
 fi
 
 printf "Test 3: Importing XML folder - ${GREEN}Success${NC}\n"

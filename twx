@@ -256,7 +256,7 @@ executeCode() {
     UPDATE_FILE="$(mktemp /tmp/xml-XXXXX).xml"
 
     export TEMP_NAME="$(basename "$UPDATE_FILE" | sed 's/.*\///;s/\..*//')"
- 
+
     if [[ $1 == -* ]]; then
         read JS_FILE
     else
@@ -285,7 +285,7 @@ executeCode() {
     fi
 
     echo "$XML_TEMPLATE" | envsubst >"$UPDATE_FILE"
-  
+
     IMPORT_JS_XML=$(import "$UPDATE_FILE")
     EXIT_CODE=$?
     rm -r "$UPDATE_FILE"
