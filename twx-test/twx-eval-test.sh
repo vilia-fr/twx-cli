@@ -8,8 +8,8 @@ CHECK_REPOSITORY_COMMAND='twx call Things/SystemRepository/ListDirectories -ppat
 CHECK_REPOSITORY=$($CHECK_REPOSITORY_COMMAND)
 
 # Execute custom JS code
-RESULT=$(twx eval twx-test/test-eval.js -pname1=Value1)
-if [ $? -ne 13 ]; then
+RESULT=$(twx eval twx-test/test-eval.js -pname1=Value1  | jq .rows[0].result)
+if [ $RESULT -ne 13 ]; then
     printf "Eval JS file - ${RED}Fail${NC}: $RESULT\n"
     exit 1
 fi
@@ -29,8 +29,8 @@ if [ $? -ne 5 ]; then
 fi
 
 # Execute custom JS code using pipe
-RESULT=$(echo "result=1+2;" | twx eval -)
-if [ $? -ne 3 ]; then
+RESULT=$(echo "result=1+2;" | twx eval - | jq .rows[0].result)
+if [ $RESULT -ne 3 ]; then
     printf "Eval wrong JS file - ${RED}Fail${NC}: $RESULT\n"
     exit 1
 fi

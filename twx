@@ -307,11 +307,7 @@ executeCode() {
         fi
 
         if [ $EXIT_CODE -ne 5 ]; then
-            RESULT_BASE_TYPE=$(echo "$CALL_JS_SERVICE" | jq -r '.dataShape.fieldDefinitions.result.baseType')
-            if [[ -n "$RESULT_BASE_TYPE" && "$RESULT_BASE_TYPE" == "INTEGER" ]]; then
-                EXIT_EVAL_CODE=$(echo "$CALL_JS_SERVICE" | jq -r '.rows[0].result')
-                EXIT_CODE=$EXIT_EVAL_CODE
-            fi
+            echo "$CALL_JS_SERVICE"
         else
             echo "Error run .js file $JS_FILE_NAME. Response: $CALL_JS_SERVICE"
         fi
@@ -319,7 +315,6 @@ executeCode() {
 
     callService "Resources/EntityServices/DeleteThing" "-pname=$TEMP_NAME" >/dev/null
 
-    echo "$EXIT_CODE"
     return ${EXIT_CODE}
 }
 
