@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Entities>
+   <Things>
+      <Thing enabled="true" name="TMP-Thing-087634" thingTemplate="GenericThing">
+         <ThingShape>
+            <ServiceDefinitions>
+               <ServiceDefinition name="TestService2">
+                  <ResultType baseType="STRING" name="result" />
+               </ServiceDefinition>
+            </ServiceDefinitions>
+            <ServiceImplementations>
+               <ServiceImplementation description="" handlerName="Script" name="TestService2">
+                  <ConfigurationTables>
+                     <ConfigurationTable dataShapeName="" description="" isMultiRow="false" name="Script" ordinal="0">
+                        <DataShape>
+                           <FieldDefinitions>
+                              <FieldDefinition baseType="STRING" description="code" name="code" ordinal="0" />
+                           </FieldDefinitions>
+                        </DataShape>
+                        <Rows>
+                           <Row>
+                              <code><![CDATA[result="test2"]]></code>
+                           </Row>
+                        </Rows>
+                     </ConfigurationTable>
+                  </ConfigurationTables>
+               </ServiceImplementation>
+            </ServiceImplementations>
+         </ThingShape>
+      </Thing>
+   </Things>
+</Entities>
