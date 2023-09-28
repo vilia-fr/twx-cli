@@ -124,6 +124,7 @@ import() {
     fi
     return ${EXIT_CODE}
 }
+
 importExt() {
     local EXIT_CODE=0
     INPUT_NAME="$1"
@@ -165,15 +166,22 @@ callService() {
     if [ $# -gt 0 ]; then
         for i in "$@"; do
             if [[ $i =~ ^-p.*= ]]; then
-                OPTION_NAME="${i%=*}"
-                OPTION_NAME="${OPTION_NAME//-/}"
-                OPTION_VALUE="${i#*=}"
+                SIMPLE=$(echo $i | tail -c +3)
+                OPTION_VALUE="$(echo $SIMPLE | sed 's/[[:alnum:]_-]*=//')"
+                OPTION_NAME="$(echo $SIMPLE | sed 's/=.*//')"
                 options["$OPTION_NAME"]="$OPTION_VALUE"
+                if [ $VERBOSE_CONSTANT = true ]; then
+                    echo "Parameter '$OPTION_NAME' = '$OPTION_VALUE'"
+                fi
             fi
         done
     fi
 
     IFS="/" read -r OPTION THING_NAME SERVICE_NAME <<<"$INPUT_NAME"
+    if [ $VERBOSE_CONSTANT = true ]; then
+        echo "Will call '$TWX_URL/$OPTION/$THING_NAME/Services/$SERVICE_NAME'"
+    fi
+
     HTTP_CODE_RESPONSE=$(
         curl -X POST $HTTP_OPTION -o "response.json" -w '%{http_code}' "$TWX_URL/$OPTION/$THING_NAME/Services/$SERVICE_NAME" \
             -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
@@ -199,13 +207,11 @@ callService() {
 createJsonBody() {
     JSON_BODY="{"
     for key in "${!options[@]}"; do
-        JSON_KEY="${key:1}"
-        JSON_VALUE=${options[$key]}
-        if jq -e . >/dev/null 2>&1 <<<"${JSON_VALUE}"; then
-            JSON_BODY+="\"$JSON_KEY\":${options[$key]},"
+        if jq -e . >/dev/null 2>&1 <<<"${options[$key]}"; then
+            JSON_BODY+="\"$key\":${options[$key]},"
         else
             echo
-            JSON_BODY+="\"$JSON_KEY\":\"${options[$key]}\","
+            JSON_BODY+="\"$key\":\"${options[$key]}\","
         fi
     done
     JSON_BODY="${JSON_BODY%,}"
