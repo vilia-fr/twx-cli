@@ -7,10 +7,10 @@ GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 
-# Check for existing of resource from a test Exstension
+# Check for existing of resource from a test Extension
 RESULT=$(twx call Resources/AddCounting/GetAddNumbersWithLoop -ploopCount=1 -psecondNumber=2 -pfirstNumber=2)
 if [ $? -ne 5 ]; then
-    printf "${YELLOW}WARNING${NC}: Test extension is already exists\n"
+    printf "${YELLOW}WARNING${NC}: Test extension already exists\n"
 fi
 
 # Import an extension

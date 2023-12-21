@@ -79,4 +79,4 @@ if [[ "$RESULT" != "$CHECK_REPOSITORY" ]]; then
     exit 1
 fi
 
-printf "Test 1 - Initial call tests complited ${GREEN}successfully${NC}\n"
+printf "Test 1 - Initial call tests completed ${GREEN}successfully${NC}\n"

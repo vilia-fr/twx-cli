@@ -1,8 +1,29 @@
 #!/bin/bash
 
+#  TWX CLI - Unofficial ThingWorx command line utilities
+#  Copyright (c) 2023 Geoffrey Espagne
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 ###########################################################################
 ################################ VARIABLES ################################
 ###########################################################################
+exit_code=0
+output=""
+is_verbose=false
+http_option="--silent"
+zip_option="-rq"
 
 
 ###########################################################################
@@ -11,7 +32,6 @@
 
 create_json_body() {
 
-    #local options=$1
     local json_body="{"
     for key in "${!options[@]}"; do
         if jq -e . >/dev/null 2>&1 <<<"${options[$key]}"; then
@@ -24,29 +44,19 @@ create_json_body() {
     json_body="${json_body%,}"
     json_body+="}"
     echo "$json_body"
+}
 
-
-    # #!/bin/bash
-    # function copyFiles() {
-    # arr=("$@")
-    # for i in "${arr[@]}";
-    #     do
-    #         echo "$i"
-    #     done
-
-    # }
-
-    # array=("one 1" "two 2" "three 3")
-
-    # copyFiles "${array[@]}"
-
-    # Output is (my script has the name foo)
-
-    # $ ./foo   
-    # one 1
-    # two 2
-    # three 3
-
+# Set verbose mode
+set_verbose() {
+    if [ "$1" = 1 ]; then
+        is_verbose=true
+        http_option="--verbose"
+        zip_option="-rv"
+    else
+        is_verbose=false
+        http_option="--silent"
+        zip_option="-rq"
+    fi
 }
 
 # Check for required tools
@@ -54,6 +64,7 @@ check_mandatory_tools() {
     local exit_code=0
     local error_exit_code=1
 
+    # mention in readme all the mandatory tools + link to get them/install + clarify why.where its neeedd
     local tools=("curl" "zip" "unzip" "jq")
     local not_installed_tools=()
 
@@ -74,32 +85,31 @@ check_mandatory_tools() {
     return ${exit_code}
 }
 
-test_exit() {
-    exit 1
-}
-
 # Check for enviroment variables
 check_configuration() {
     local exit_code=0
     local error_exit_code=2
 
-    if [ ! -z "$TWX_APPKEY" ] && [ ! -z "$TWX_URL" ]; then
+    if [ -n "$TWX_APPKEY" ] && [ -n "$TWX_URL" ]; then
         echo "Continuing..."
     else
         if [ -f ./.thingworx.conf ]; then
             source ./.thingworx.conf
         elif [ -f ~/.thingworx.conf ]; then
             source ~/.thingworx.conf
+        else 
+            echo "Error: No configuration file detected."
+            exit $error_exit_code
         fi
 
         if [ -z "$TWX_APPKEY" ]; then
             echo "Error: TWX_APPKEY variable is empty. Set TWX_APPKEY variable in ~/.thingworx.conf file."
-            exit_code=$error_exit_code
+            exit $error_exit_code
         fi
 
         if [ -z "$TWX_URL" ]; then
             echo "Error: TWX_URL variable is empty. Set TWX_URL variable in ~/.thingworx.conf file."
-            exit_code=$error_exit_code
+            exit $error_exit_code
         fi
     fi
 
@@ -110,7 +120,6 @@ check_configuration() {
 ################################ FUNCTIONS ################################
 ###########################################################################
 
-# TODO: clean variable and exit codes
 import() {
     local input_name="$1"
     local exit_code=0
@@ -118,57 +127,56 @@ import() {
 
     if [ -d "$input_name" ]; then
         # If input is a directory, create a temporary zip file
-        TEMP_ZIP="$(mktemp -u).zip"
-        ZIP_NAME="$(basename "$TEMP_ZIP" | sed 's/^tmp\.//' | sed 's/\.zip$//')"
-        TEMP_ZIP="$ZIP_NAME.zip"
-        ROOT_FOLDER="$(basename "$input_name")"
+        local tmp_zip="$(mktemp -u).zip"
+        local zip_name="$(basename "$tmp_zip" | sed 's/^tmp\.//' | sed 's/\.zip$//')"
+        local tmp_zip="$zip_name.zip"
 
-        zip $ZIP_OPTION "$TEMP_ZIP" "$input_name"
+        zip "$zip_option" "$tmp_zip" "$input_name"
 
-        FOLDER_NAME="tmp-${ZIP_NAME}"
+        local folder_name="tmp-${zip_name}"
 
         # Upload zip to ThingWorx
-        HTTP_STATUS_CODE_UPLOAD=$(
+        local http_status_code_upload=$(
             curl -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
                 -F "upload-repository=SystemRepository" \
-                -F "upload-path=$ZIP_NAME" \
+                -F "upload-path=$zip_name" \
                 -F "upload-submit=Upload" \
-                -F "file=@$TEMP_ZIP;type=application/x-zip-compressed" \
-                --write-out %{http_code} $HTTP_OPTION --output /dev/null "$TWX_URL/FileRepositoryUploader"
+                -F "file=@$tmp_zip;type=application/x-zip-compressed" \
+                --write-out "%{http_code}" "$http_option" --output /dev/null "$TWX_URL/FileRepositoryUploader"
         )
 
-        if [ "$HTTP_STATUS_CODE_UPLOAD" -eq 200 ]; then
+        if [ "$http_status_code_upload" -eq 200 ]; then
             if [ $is_verbose = true ]; then
-                echo "Upload success,  http code ${HTTP_STATUS_CODE_UPLOAD}"
+                echo "Upload success,  http code ${http_status_code_upload}"
             fi
         else
-            echo "Couldn't upload $input_name, http code ${HTTP_STATUS_CODE_UPLOAD}"
+            echo "Couldn't upload $input_name, http code ${http_status_code_upload}"
             exit_code=3
         fi
 
-        rm "$TEMP_ZIP"
+        rm "$tmp_zip"
 
         #Extract zip
-        EXTRACT_ZIP=$(call_service "Things/SystemRepository/ExtractZipArchive" "-ppath=$FOLDER_NAME" "-pzipFileName=${ZIP_NAME}/${TEMP_ZIP}")
+        local extract_zip=$(call_service "Things/SystemRepository/ExtractZipArchive" "-ppath=$folder_name" "-pzipFileName=${zip_name}/${tmp_zip}")
         exit_code=$?
 
         if [ $exit_code -eq 5 ]; then
             echo "Couldn't extract $input_name,"
             #GES
-            echo "$EXTRACT_ZIP" 
+            echo "$extract_zip" 
         fi
 
         #Import entities
-        IMPORT_XML=$(call_service "Resources/SourceControlFunctions/ImportSourceControlledEntities" "-ppath=$FOLDER_NAME" "-prepositoryName=SystemRepository")
+        import_xml=$(call_service "Resources/SourceControlFunctions/ImportSourceControlledEntities" "-ppath=$folder_name" "-prepositoryName=SystemRepository")
         exit_code=$?
 
         if [ $exit_code -eq 5 ]; then
-            echo "Couldn't import $input_name, response $IMPORT_XML\n"
+            echo "Couldn't import $input_name, response $import_xml\n"
         fi
 
         #Delete folders
-        call_service "Things/SystemRepository/DeleteFolder" "-ppath=$ZIP_NAME" >/dev/null
-        call_service "Things/SystemRepository/DeleteFolder" "-ppath=$FOLDER_NAME" >/dev/null
+        call_service "Things/SystemRepository/DeleteFolder" "-ppath=$zip_name" >/dev/null
+        call_service "Things/SystemRepository/DeleteFolder" "-ppath=$folder_name" >/dev/null
 
         if [ $exit_code -eq 0 ]; then
             echo "Success"
@@ -176,80 +184,84 @@ import() {
 
     else
         #Import single entity
-        URL="$TWX_URL/Importer?purpose=import"
+        local url="$TWX_URL/Importer?purpose=import"
 
-        HTTP_CODE_RESPONSE=$(
-            curl -X POST $HTTP_OPTION -F "file=@$input_name" \
+        local http_code_response=$(
+            curl -X POST "$http_option" -F "file=@$input_name" \
                 -H "appKey:$TWX_APPKEY" \
                 -H "Accept: text/xml" \
                 -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" \
-                -w 'HTTPSTATUS:%{http_code}' "$URL"
+                -w 'HTTPSTATUS:%{http_code}' "$url"
         )
 
-        HTTP_STATUS=$(echo $HTTP_CODE_RESPONSE | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+        local http_status=$(echo "$http_code_response" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
 
-        if [ "$HTTP_STATUS" -eq 200 ]; then
-            if [ $is_verbose = true ]; then
-                echo "Upload success, http code ${HTTP_STATUS}"
+        if [ "$http_status" -eq 200 ]; then
+            if [ "$is_verbose" = true ]; then
+                echo "Upload success, http code ${http_status}"
             else
                 echo "Success"
             fi
         else
-            echo "Couldn't upload $input_name, http code ${HTTP_STATUS}"
+            echo "Couldn't upload $input_name, http code ${http_status}"
             exit_code=2
         fi
     fi
+
     return ${exit_code}
 }
 
-importExt() {
-    # TODO: why no return or exit ?
-    local EXIT_CODE=0
-    local exit_code_error=4
-    INPUT_NAME="$1"
-    URL="$TWX_URL/ExtensionPackageUploader?purpose=import&validate=false"
+import_ext() {
+    local exit_code=0
+    local error_exit_code=4
 
-    RESPONSE=$(
-        curl $HTTP_OPTION -X POST -F "file=@$INPUT_NAME" \
+    local input_params="$1"
+    local url="$TWX_URL/ExtensionPackageUploader?purpose=import&validate=false"
+
+    local response=""
+    response=$(
+        curl -X POST "$http_option" -F "file=@$input_params" \
             -H "appKey:$TWX_APPKEY" \
-            -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" "$URL"
+            -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" "$url"
     )
 
-    if [[ $RESPONSE == "Not Acceptable" ]]; then
+    if [[ "$response" == "Not Acceptable" ]]; then
         echo "Fail. Not Acceptable"
-        EXIT_CODE=8
-        exit $EXIT_CODE
+        exit_code=8
+        exit $exit_code
     else
-        REPORT_MESSAGE=$(echo "$RESPONSE" | jq -r '.rows[0].validate.rows[0].reportMessage')
+        local report_message=""
+        report_message=$(echo "$response" | jq -r '.rows[0].validate.rows[0].reportMessage')
+
+        if [ "$report_message" == "Extension is already installed" ]; then
+            echo "Success"
+            exit_code=0
+        elif [ "$report_message" == "" ]; then
+            echo "Success"
+            exit_code=0
+        else
+            echo "Error installing extension $input_params, error message: $report_message"
+            exit_code=4
+        fi
     fi
 
-    if [ "$REPORT_MESSAGE" == "Extension is already installed" ]; then
-        echo "Success"
-        EXIT_CODE=0
-    elif [ "$REPORT_MESSAGE" == "" ]; then
-        echo "Success"
-        EXIT_CODE=0
-    else
-        echo "Error installing extension $zip_file, error message: $REPORT_MESSAGE"
-        EXIT_CODE=4
-    fi
+    return ${exit_code}
 }
 
 call_service() {
     local exit_code=0
     local error_exit_code=5
-    local input_name="$1"
+    local input_params="$1"
     shift
 
-    # TODO: check if options can be passed to create_json_body
     declare -A options
 
     if [ $# -gt 0 ]; then
         for i in "$@"; do
             if [[ $i =~ ^-p.*= ]]; then
-                SIMPLE=$(echo $i | tail -c +3)
-                OPTION_VALUE="$(echo $SIMPLE | sed 's/[[:alnum:]_-]*=//')"
-                OPTION_NAME="$(echo $SIMPLE | sed 's/=.*//')"
+                SIMPLE=$(echo "$i" | tail -c +3)
+                OPTION_VALUE="$(echo "$SIMPLE" | sed 's/[[:alnum:]_-]*=//')"
+                OPTION_NAME="$(echo "$SIMPLE" | sed 's/=.*//')"
                 options["$OPTION_NAME"]="$OPTION_VALUE"
                 if [ "$is_verbose" = true ]; then
                     echo "Parameter '$OPTION_NAME' = '$OPTION_VALUE'"
@@ -258,17 +270,17 @@ call_service() {
         done
     fi
 
-    local entity_type
-    local entity_name
-    local service_name
+    local entity_type=""
+    local entity_name=""
+    local service_name=""
 
-    IFS="/" read -r entity_type entity_name service_name <<<"$input_name"
+    IFS="/" read -r entity_type entity_name service_name <<<"$input_params"
     if [ "$is_verbose" = true ]; then
         echo "Will call '$TWX_URL/$entity_type/$entity_name/Services/$service_name'"
     fi
 
     local http_response=$(
-        curl -X POST "$HTTP_OPTION" -o "response.json" -w '%{http_code}' "$TWX_URL/$entity_type/$entity_name/Services/$service_name" \
+        curl -X POST "$http_option" -o "response.json" -w '%{http_code}' "$TWX_URL/$entity_type/$entity_name/Services/$service_name" \
             -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
             -H "Content-Type: application/json" \
             -H "Accept: application/json" \
@@ -283,7 +295,7 @@ call_service() {
     if [ "$http_status" -eq 200 ]; then
         echo "$http_body"
     else
-        echo "Couldn't call $input_name, error: $http_body"
+        echo "Couldn't call $input_params, error: $http_body"
         exit_code=$error_exit_code
 
     fi
@@ -292,7 +304,7 @@ call_service() {
 
 execute_code() {
 
-    XML_TEMPLATE='<?xml version="1.0" encoding="UTF-8"?>
+    local xml_template='<?xml version="1.0" encoding="UTF-8"?>
 <Entities>
    <Things>
       <Thing enabled="true" name="$TEMP_NAME" thingTemplate="GenericThing">
@@ -328,25 +340,28 @@ execute_code() {
    </Things>
 </Entities>'
 
-    local EXIT_CODE=0
-    local JS_FILE_NAME="taken from input"
+    local exit_code=0
+    local js_file_name="taken from input"
+    local js_file_content=""
     UPDATE_FILE="$(mktemp /tmp/xml-XXXXX).xml"
 
     export TEMP_NAME="$(basename "$UPDATE_FILE" | sed 's/.*\///;s/\..*//')"
 
     if [[ $1 == -* ]]; then
-        read JS_FILE
+        read js_file_content
     else
-        JS_FILE=$(cat "$1")
-        JS_FILE_NAME=$1
+        js_file_content=$(cat "$1")
+        js_file_name=$1
         shift
     fi
 
-    if [[ "$JS_FILE" =~ ^\#\! ]]; then
-        export NEW_VALUE=$(echo "$JS_FILE" | sed '1d')
+    local code=""
+    if [[ "$js_file_content" =~ ^\#\! ]]; then
+        code=$(echo "$js_file_content" | sed '1d')
     else
-        export NEW_VALUE="$JS_FILE"
+        code="$js_file_content"
     fi
+    export NEW_VALUE="$code"
 
     declare -A options
     if [ $# -gt 0 ]; then
@@ -360,53 +375,71 @@ execute_code() {
         done
     fi
 
-    echo "$XML_TEMPLATE" | envsubst >"$UPDATE_FILE"
+    echo "$xml_template" | envsubst >"$UPDATE_FILE"
 
     IMPORT_JS_XML=$(import "$UPDATE_FILE")
-    EXIT_CODE=$?
+    exit_code=$?
+
     rm -r "$UPDATE_FILE"
 
-    if [ $EXIT_CODE -eq 2 ]; then
-        echo "Error importing XML with .js file $JS_FILE_NAME"
+    if [ $exit_code -eq 2 ]; then
+        echo "Error importing XML with .js file $js_file_name"
     else
         PARAM_ARRAY=()
         if [ $# -eq 0 ]; then
             CALL_JS_SERVICE=$(call_service "Things/$TEMP_NAME/Run")
-            EXIT_CODE=$?
+            exit_code=$?
         else
             for i in "$@"; do
                 PARAM_ARRAY+=("$i")
             done
 
             CALL_JS_SERVICE=$(call_service "Things/$TEMP_NAME/Run" "${PARAM_ARRAY[@]}")
-            EXIT_CODE=$?
+            exit_code=$?
         fi
 
-        if [ $EXIT_CODE -ne 5 ]; then
+        if [ $exit_code -ne 5 ]; then
             echo "$CALL_JS_SERVICE"
         else
-            echo "Error run .js file $JS_FILE_NAME. Response: $CALL_JS_SERVICE"
+            echo "Error run .js file $js_file_name. Response: $CALL_JS_SERVICE"
         fi
     fi
 
-    call_service "Resources/EntityServices/DeleteThing" "-pname=$TEMP_NAME" >/dev/null
+    call_service "Resources/EntityServices/DeleteThing" "-pname=$TEMP_NAME" > /dev/null
 
-    return ${EXIT_CODE}
+    return ${exit_code}
+}
+
+upload_file() {
+    local exit_code=0
+    local error_exit_code=6
+
+    local full_url="$TWX_URL/FileRepositories/$1"
 }
 
 download_file() {
     local exit_code=0
-    local error_exit_code=6
+    local error_exit_code=7
 
     local file_path="$1"
-    local base_filename=$(basename $file_path)
+    local base_filename=$(basename "$file_path")
     local full_url="$TWX_URL/FileRepositories/$1"
 
-    local repository="${filePath%%/*}"
+    local repository="${file_path%%/*}"
+
+    local download_dir=""
+    if [ -n "$2" ]; then
+        if [[ -d "$2" ]]; then
+            download_dir="$2"
+        else
+            echo "$2 is not a valid directory"
+            exit $error_exit_code
+        fi
+    fi
 
     if [ $is_verbose = true ]; then
         echo "Downloading file ${base_filename}, filePath ${file_path}, download URL: ${full_url}"
-        echo "repository ${repository}"
+        echo "Repository ${repository}"
     fi
 
     local http_status_code=$(
@@ -416,10 +449,14 @@ download_file() {
         -s -o "$base_filename" -w "%{http_code}"
     )
 
-    if [ "200" != "${http_status_code}" ] && [ "406" != "${http_status_code}" ]; then
-        echo "Failed to download ${file}, with http code ${http_status_code}"
+    if [ "200" != "${http_status_code}" ]; then
+        echo "Failed to download ${file_path}, with http code ${http_status_code}"
+        rm -r "$base_filename"
         exit_code=$error_exit_code
     else
+        if [ -n "$download_dir" ]; then
+            mv "./$base_filename" "$download_dir"
+        fi
         echo "Successfully downloaded file $file_path"
     fi
 
@@ -427,37 +464,35 @@ download_file() {
 }
 
 config_info() {
-    # TODO: improve display
-    # TODO: add all variables
-    echo "TWX_URL $TWX_URL"
-    echo "TWX_APPKEY $TWX_APPKEY"
+    echo "--- Current Thingworx configuration : "
+    echo
+    echo " > TWX_URL: $TWX_URL"
+    echo " > TWX_APPKEY: $TWX_APPKEY"
 }
 
 help_info() {
-    # TODO: adding detailled help for each command
-    # TODO: adding long option to look more pro
-    # TODO: rewriting input_name as params for commands
+
     echo "--- Usage:
 
-twx [OPTIONS] [COMMAND] [PARAMS]"
+ > twx [OPTIONS] [COMMAND] [PARAMS]"
 
     echo
     echo "--- Available commands:
    
-import          input_name      -	Importing single, multiple entities or extensions.
+import          params      -	Importing single, multiple entities or extensions.
 					As a paramameter accepts a file.xml, file.zip or directory. 
 
-call            input_name      - 	Calls service or resource from Thingworx.						
+call            params      - 	Calls service or resource from Thingworx.						
 					As a paramameter accepts a EntityType/ThingName/ServiceName -pParam1=Value1 -pParam2=Value2 			
 	
-eval            input_name      -	Execute custom JS code on Thingworx.
+eval            params      -	Execute custom JS code on Thingworx.
 					As a paramameter accepts file.js  -pParam1=Value1 -pParam2=Value2 	
 					If no filename is provided, the script body is taken from stdin.
 
-download        input_name      -	Download file from Thingworx repository.
+download        params      -	Download file from Thingworx repository.
 					As a paramameter accepts file path on a repository FileRepositoryName/filePath
 
-config                          -	Display current configuration."
+config                      -	Display current configuration."
 
 
     echo
@@ -471,22 +506,11 @@ config                          -	Display current configuration."
 ################################ MAIN SEQUENCE ################################
 ###############################################################################
 
-exit_code=0
-output=""
-
-# TODO: put in check_verbose func
-is_verbose=false
 if [ "$1" = "-v" ]; then
     shift
-    is_verbose=true
-fi
-
-if [ "$is_verbose" = true ]; then
-    HTTP_OPTION="--verbose"
-    ZIP_OPTION="-rv"
+    set_verbose 1
 else
-    HTTP_OPTION="--silent"
-    ZIP_OPTION="-rq"
+    set_verbose 0
 fi
 
 check_configuration
@@ -497,7 +521,7 @@ if [ "$1" == "import" ]; then
         output=$(import "$2")
         exit_code=$?
     elif [ "${2##*.}" == "zip" ]; then
-        output=$(importExt "$2")
+        output=$(import_ext "$2")
         exit_code=$?
     fi
 elif [ "$1" == "call" ]; then
@@ -516,7 +540,8 @@ elif [ "$1" == "config" ]; then
     config_info
 elif [ "$#" -eq 0 ]; then
     help_info
-    #exit=0
+else 
+    help_info
 fi
 
 echo "$output"

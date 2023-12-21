@@ -31,6 +31,14 @@ All commands return 0 exit code in case of success, and non-zero in case
 of failure. In the latter case the command outputs the error message,
 otherwise it spits out a single "Success" string.
 
+### Getting current configuration
+
+Displays the current configuration from local directory configuration file if any, or global user configuration.
+
+```bash
+twx config
+```
+
 ### Importing individual entities
 
 ```bash
@@ -180,6 +188,17 @@ chmod +x purge
 This provides a simple and convenient way of building a sophisticated DevOps toolbox
 for your Linux shell.
 
+### Downloading files
+
+The opposite of uploading, works for individual files for now. Directories download
+are to be added later.
+The target directory is optional. If omitted, `.` is used. Examples:
+
+```bash
+twx download ImportDataRepository/data/history.csv
+less history.csv
+```
+
 ## TODO: Future / lower priority features
 
 ### Importing data
@@ -213,7 +232,7 @@ command.
 twx upload ImportDataRepository/data ~/CSVs
 ```
 
-### Downloading files
+### Downloading directories
 
 The opposite of uploading, works for both individual files and directories
 (the files are zipped, downloaded and unzipped in the latter case). The target
