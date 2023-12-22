@@ -9,18 +9,19 @@ was tested on
 
 ## Configure
 
-Install prerequisites: `curl`, `bash`, ...
+Install prerequisites: `curl`, `bash`, `zip`, `unzip`, `jq`.
 
-Create a file `~/.thingworx.conf`:
+On Windows, this tool has been tested and validated using GitBash.
+
+Create a file `~/.thingworx.conf`, or a `.thingworx.conf` file in your local folder. 
+If no local config is found, then the global one in `~` will be used. The file should contains:
 
 ```bash
 # ThingWorx base URL without trailing slash /
 TWX_URL="http://localhost:8080/Thingworx"
 
-# Use one of the two -- either appkey or admin credentials
+# ThingWorx appkey
 TWX_APPKEY="1234-5678-9012-3456-7890"
-TWX_ADMIN_USER="Administrator"
-TWX_ADMIN_PASSWORD="secret"
 ```
 
 Put `twx` script on the system `PATH`.
@@ -30,6 +31,14 @@ Put `twx` script on the system `PATH`.
 All commands return 0 exit code in case of success, and non-zero in case
 of failure. In the latter case the command outputs the error message,
 otherwise it spits out a single "Success" string.
+
+### Getting current configuration
+
+Displays the current configuration from local directory configuration file if any, or global user configuration.
+
+```bash
+twx config
+```
 
 ### Importing individual entities
 
@@ -180,17 +189,6 @@ chmod +x purge
 This provides a simple and convenient way of building a sophisticated DevOps toolbox
 for your Linux shell.
 
-## TODO: Future / lower priority features
-
-### Importing data
-
-CSV files are imported as DataTable rows. This assumes that the DT exists and
-has compatible DataShape. The filename corresponds to the DT entity name.
-
-```bash
-twx import MyDataTable.csv
-```
-
 ### Uploading individual files
 
 Repository[/path] is the first parameter, the file is the second:
@@ -203,6 +201,28 @@ twx upload SystemRepository root-data.txt
 If `path` does not exist -- it is created recursively. Existing files are
 overwritten silently.
 
+### Downloading individual files
+
+The opposite of uploading, works for individual files for now. Directories download
+are to be added later.
+The target directory is optional. If omitted, `.` is used. Examples:
+
+```bash
+twx download ImportDataRepository/data/history.csv
+less history.csv
+```
+
+## TODO: Future / lower priority features
+
+### Importing data
+
+CSV files are imported as DataTable rows. This assumes that the DT exists and
+has compatible DataShape. The filename corresponds to the DT entity name.
+
+```bash
+twx import MyDataTable.csv
+```
+
 ### Uploading multiple files
 
 Directories are uploaded similarly to entity directories -- files are zipped,
@@ -213,7 +233,7 @@ command.
 twx upload ImportDataRepository/data ~/CSVs
 ```
 
-### Downloading files
+### Downloading directories
 
 The opposite of uploading, works for both individual files and directories
 (the files are zipped, downloaded and unzipped in the latter case). The target
