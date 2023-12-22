@@ -273,8 +273,7 @@ call_service() {
             -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
             -H "Content-Type: application/json" \
             -H "Accept: application/json" \
-            -d "$(create_json_body $options)"
-            # -d "$(create_json_body ${options[@]})"
+            -d "$(create_json_body)"
     )
 
     local http_body=$(cat response.json)
@@ -408,14 +407,8 @@ upload_file() {
     local repository="${repo_path%%/*}"
     local remote_path=${repo_path#"$repository"}
 
-    echo "repo_path $repo_path"
-    echo "repository $repository"
-    echo "remote_path $remote_path"
-    echo
-    echo
-
     local local_file_path="$2"
-    #"$(dirname "$0")/test-upload-samples/test-upload.txt"
+
     if [ -n "$local_file_path" ]; then
         if [ -f "$local_file_path" ]; then 
             if [ $is_verbose = true ]; then
@@ -445,7 +438,7 @@ upload_file() {
         fi
     else
         echo "Couldn't upload $local_file_path, http code ${http_status_code_upload}"
-        exit_code=error_exit_code
+        exit_code=$error_exit_code
     fi
 
     return ${exit_code}
