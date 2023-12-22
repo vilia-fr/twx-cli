@@ -21,8 +21,6 @@ set -e
 ###########################################################################
 ################################ VARIABLES ################################
 ###########################################################################
-is_windows=0
-log_prefix="Export"
 twx_url="$TWX_PROTOCOL://$TWX_HOST:$TWX_PORT/Thingworx"
 
 readonly base_remote_export_folder="src"
@@ -53,7 +51,6 @@ title "Export step 1: Cleanup remote SRC folder"
 set +e
 twx call "Things/$export_repository/DeleteFolder" -ppath="/${base_remote_export_folder}"
 set -e
-# twx call "Things/SystemRepository/DeleteFolder" -ppath="/src"
 
 title "Export step 2: Export sources"
 twx call "Things/$export_thing/ExportSources" -prepository"${export_repository}" -ppath="/${base_remote_export_folder}/${export_folder}"
