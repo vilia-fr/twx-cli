@@ -46,21 +46,16 @@ To do so, **Edit** the thing in the Thingworx Composer, and set the configuratio
 
 The configuration properties are:
 
-- exportRepository: the TWX repository where the entities will be exported as Source Control.
-By default **SystemRepository**
-
-- exportFolder: path of the folder in the repository. By default **twx-src**
-
-- exportLocalizationTokenPrefix: used to export localizations tokens. Will exports all tokens that matches
+- **exportLocalizationTokenPrefix**: used to export localizations tokens. Will exports all tokens that matches
 the configured prefix.
 
-- projectExportList: list of the TWX project that will be exported. Used to only export relevant projects.
+- **projectExportList**: list of the TWX project that will be exported. Used to only export relevant projects.
 
-- configurationTablesToClean: used to clean configuration table for export. This table contains a list of
+- **configurationTablesToClean**: used to clean configuration table for export. This table contains a list of
 things, and for each a list of configuration table names. For configured thing/configuration tables, the 
 tables will be exported empty, so specific environment configurations can be omitted in the export.
 
-- groupsToClean: list of groups that will be cleaned during the export. Used to not export environment
+- **groupsToClean**: list of groups that will be cleaned during the export. Used to not export environment
 specific users.
 
 ### Export
