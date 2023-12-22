@@ -66,7 +66,7 @@ unzip "twx-src.zip" -d "./tmp/"
 rm twx-src.zip
 
 title "Export step 6: Cleanup local sources"
-rm -rf "/twx-src"
+rm -rf "./twx-src"
 
 title "Export step 7: Copy sources"
 mv "tmp/${remote_export_folder}/" "."
