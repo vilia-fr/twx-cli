@@ -65,13 +65,15 @@ specific users.
 
 ### Export
 
-Once configuration has been made in Thingworx, the export can be performed using the script `export.sh`:
+Once configuration has been made in Thingworx, the export can be performed using the script `export.sh`.
+The best way to do it is to copy the whole `utilities/exporter` folder in your project folder where you want the 
+sources to be exported, then launch the script as follow:
 
 ```bash
-./export.sh
+./utilities/exporter/export.sh
 ```
 
-This will create a folder twx-src as follow:
+This will create a folder twx-src as follow (with Project_1, etc replaced by your exported TWX projects):
 
 ```
 +-- twx-src
