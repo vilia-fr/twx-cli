@@ -23,9 +23,8 @@ set -e
 ###########################################################################
 twx_url="$TWX_PROTOCOL://$TWX_HOST:$TWX_PORT/Thingworx"
 
-readonly base_remote_export_folder="src"
+readonly remote_export_folder="src"
 readonly export_thing="Vilia.Utils.Exporter_TG"
-readonly export_folder="export"
 readonly export_repository="SystemRepository"
 
 ###########################################################################
@@ -49,14 +48,14 @@ title "Export entities"
 
 title "Export step 1: Cleanup remote SRC folder"
 set +e
-twx call "Things/$export_repository/DeleteFolder" -ppath="/${base_remote_export_folder}"
+twx call "Things/$export_repository/DeleteFolder" -ppath="/${remote_export_folder}"
 set -e
 
 title "Export step 2: Export sources"
-twx call "Things/$export_thing/ExportSources" -prepository"${export_repository}" -ppath="/${base_remote_export_folder}/${export_folder}"
+twx call "Things/$export_thing/ExportSources" -prepository"${export_repository}" -ppath="/${remote_export_folder}"
 
 title "Export step 3: Zip sources"
-twx call "Things/$export_repository/CreateZipArchive" -ppath="/" -pnewFileName="twx-src.zip" -pfiles="/${base_remote_export_folder}/${export_folder}"
+twx call "Things/$export_repository/CreateZipArchive" -ppath="/" -pnewFileName="twx-src.zip" -pfiles="/${remote_export_folder}"
 
 title "Export step 4: Download sources"
 twx download "$export_repository/twx-src.zip"
@@ -67,10 +66,11 @@ unzip "twx-src.zip" -d "./tmp/"
 rm twx-src.zip
 
 title "Export step 6: Cleanup local sources"
-rm -rf "/twx-src/${export_folder}"
+rm -rf "/twx-src"
 
 title "Export step 7: Copy sources"
-cp -rf "tmp/${base_remote_export_folder}/${export_folder}" "./twx-src"
+mv "tmp/${remote_export_folder}/" "."
+mv "${remote_export_folder}" "twx-src"
 rm -rf ./tmp/
 
 title "Export completed successfully"
