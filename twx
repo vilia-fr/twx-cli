@@ -120,6 +120,7 @@ check_configuration() {
 ################################ FUNCTIONS ################################
 ###########################################################################
 
+# TODO: check if everuthing clean exit code etc
 import() {
     local input_name="$1"
     local exit_code=0
@@ -136,6 +137,7 @@ import() {
         local folder_name="tmp-${zip_name}"
 
         # Upload zip to ThingWorx
+        # old ------------------------------------
         local http_status_code_upload=$(
             curl -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
                 -F "upload-repository=SystemRepository" \
@@ -153,8 +155,21 @@ import() {
             echo "Couldn't upload $input_name, http code ${http_status_code_upload}"
             exit_code=3
         fi
+        # old ------------------------------------
+
+        # new ------------------------------------
+        upload_result=$(upload_file "SystemRepository" "$tmp_zip")
+        exit_code=$?
 
         rm "$tmp_zip"
+
+        if [ $exit_code -eq 6 ]; then
+            echo "Couldn't upload $tmp_zip,"
+            exit "$exit_code" 
+        fi
+        # new ------------------------------------
+
+        
 
         #Extract zip
         local extract_zip=$(call_service "Things/SystemRepository/ExtractZipArchive" "-ppath=$folder_name" "-pzipFileName=${zip_name}/${tmp_zip}")
@@ -414,7 +429,51 @@ upload_file() {
     local exit_code=0
     local error_exit_code=6
 
-    local full_url="$TWX_URL/FileRepositories/$1"
+    local repo_path="$1"
+    local base_filename=$(basename "$repo_path")
+    local repository="${repo_path%%/*}"
+    local remote_path=${repo_path#"$repository"}
+
+    echo "$repo_path"
+    echo "$repository"
+    echo "$remote_path"
+    echo
+
+    local local_file_path="$2"
+    #"$(dirname "$0")/test-upload-samples/test-upload.txt"
+    if [ -n "$local_file_path" ]; then
+        if [ -f "$local_file_path" ]; then 
+            if [ $is_verbose = true ]; then
+                echo "$local_file_path exists."
+            fi
+        else 
+            echo "$local_file_path does not exist."
+            exit $error_exit_code
+        fi
+    else
+        echo "Missing upload file path."
+        exit $error_exit_code
+    fi
+
+    local http_status_code_upload=$(
+        curl -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
+            -F "upload-repository=$repository" \
+            -F "upload-path=$remote_path" \
+            -F "upload-submit=Upload" \
+            -F "file=@$local_file_path;type=application/x-zip-compressed" \
+            --write-out "%{http_code}" "$http_option" --output /dev/null "$TWX_URL/FileRepositoryUploader"
+    )
+
+    if [ "$http_status_code_upload" -eq 200 ]; then
+        if [ $is_verbose = true ]; then
+            echo "Upload success,  http code ${http_status_code_upload}"
+        fi
+    else
+        echo "Couldn't upload $local_file_path, http code ${http_status_code_upload}"
+        exit_code=error_exit_code
+    fi
+
+    return ${exit_code}
 }
 
 download_file() {
@@ -454,8 +513,9 @@ download_file() {
         rm -r "$base_filename"
         exit_code=$error_exit_code
     else
+        echo $(pwd)
         if [ -n "$download_dir" ]; then
-            mv "./$base_filename" "$download_dir"
+            mv -f "./$base_filename" "$download_dir"
         fi
         echo "Successfully downloaded file $file_path"
     fi
@@ -488,9 +548,13 @@ call            params      - 	Calls service or resource from Thingworx.
 eval            params      -	Execute custom JS code on Thingworx.
 					As a paramameter accepts file.js  -pParam1=Value1 -pParam2=Value2 	
 					If no filename is provided, the script body is taken from stdin.
-
-download        params      -	Download file from Thingworx repository.
+    
+upload          params      -	Upload file to Thingworx repository.
 					As a paramameter accepts file path on a repository FileRepositoryName/filePath
+    
+download        params      -	Download file from Thingworx repository.
+					As a paramameter accepts file path on a repository FileRepositoryName/filePath and a local
+                    target path
 
 config                      -	Display current configuration."
 
@@ -531,6 +595,10 @@ elif [ "$1" == "call" ]; then
 elif [ "$1" == "eval" ]; then
     shift
     output=$(execute_code "$@")
+    exit_code=$?
+elif [ "$1" == "upload" ]; then
+    shift
+    output=$(upload_file "$@")
     exit_code=$?
 elif [ "$1" == "download" ]; then
     shift

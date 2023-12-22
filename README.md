@@ -17,10 +17,8 @@ Create a file `~/.thingworx.conf`:
 # ThingWorx base URL without trailing slash /
 TWX_URL="http://localhost:8080/Thingworx"
 
-# Use one of the two -- either appkey or admin credentials
+# ThingWorx appkey
 TWX_APPKEY="1234-5678-9012-3456-7890"
-TWX_ADMIN_USER="Administrator"
-TWX_ADMIN_PASSWORD="secret"
 ```
 
 Put `twx` script on the system `PATH`.
