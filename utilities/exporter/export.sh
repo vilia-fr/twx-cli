@@ -23,7 +23,6 @@ set -e
 ###########################################################################
 is_windows=0
 log_prefix="Export"
-unzip_utility=""
 twx_url="$TWX_PROTOCOL://$TWX_HOST:$TWX_PORT/Thingworx"
 
 readonly base_remote_export_folder="src"
@@ -67,7 +66,7 @@ twx download "$export_repository/twx-src.zip"
 
 title "Export step 5: Extract sources"
 rm -rf ./tmp/
-$unzip_utility "twx-src.zip" -d "./tmp/"
+unzip "twx-src.zip" -d "./tmp/"
 rm twx-src.zip
 
 title "Export step 6: Cleanup local sources"
