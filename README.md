@@ -9,9 +9,12 @@ was tested on
 
 ## Configure
 
-Install prerequisites: `curl`, `bash`, ...
+Install prerequisites: `curl`, `bash`, `zip`, `unzip`, `jq`.
 
-Create a file `~/.thingworx.conf`:
+On Windows, this tool has been tested and validated using GitBash.
+
+Create a file `~/.thingworx.conf`, or a `.thingworx.conf` file in your local folder. 
+If no local config is found, then the global one in `~` will be used. The file should contains:
 
 ```bash
 # ThingWorx base URL without trailing slash /
@@ -186,7 +189,19 @@ chmod +x purge
 This provides a simple and convenient way of building a sophisticated DevOps toolbox
 for your Linux shell.
 
-### Downloading files
+### Uploading individual files
+
+Repository[/path] is the first parameter, the file is the second:
+
+```bash
+twx upload SystemRepository/docs README.md
+twx upload SystemRepository root-data.txt
+```
+
+If `path` does not exist -- it is created recursively. Existing files are
+overwritten silently.
+
+### Downloading individual files
 
 The opposite of uploading, works for individual files for now. Directories download
 are to be added later.
@@ -207,18 +222,6 @@ has compatible DataShape. The filename corresponds to the DT entity name.
 ```bash
 twx import MyDataTable.csv
 ```
-
-### Uploading individual files
-
-Repository[/path] is the first parameter, the file is the second:
-
-```bash
-twx upload SystemRepository/docs README.md
-twx upload SystemRepository root-data.txt
-```
-
-If `path` does not exist -- it is created recursively. Existing files are
-overwritten silently.
 
 ### Uploading multiple files
 

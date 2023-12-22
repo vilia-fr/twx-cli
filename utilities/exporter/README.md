@@ -4,7 +4,7 @@ This is a Bash script to simplify Thingworx application export. It
 was tested on
 
 - Ubuntu Linux 22.04
-- GitBash on Windows 10 (TODO)
+- Windows Server 2019 (using GitBash)
 
 ## Prerequisites
 
