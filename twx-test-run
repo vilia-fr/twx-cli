@@ -23,4 +23,8 @@ if [ $? -ne 0 ]; then exit 1; fi
 twx-test/twx-eval-test.sh
 if [ $? -ne 0 ]; then exit 1; fi
 
-printf "All tests complited ${GREEN}successfully${NC}\n"
+# Test 6: Upload/Download a file
+twx-test/twx-upload-download-test.sh
+if [ $? -ne 0 ]; then exit 1; fi
+
+printf "All tests completed ${GREEN}successfully${NC}\n"
