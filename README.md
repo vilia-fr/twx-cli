@@ -12,6 +12,8 @@ was tested on
 and is not supported, verified or endorsed by PTC Inc. in any way. Use it on your own risk and refer
 to its source code in case of doubts or questions.
 
+ThingWorx is a registered trademark of PTC Inc.
+
 ## Install and configure
 
 Install prerequisites: `curl`, `bash`, `zip`, `unzip` and `jq`.
