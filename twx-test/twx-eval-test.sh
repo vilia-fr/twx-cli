@@ -22,7 +22,7 @@ if [ $? -ne 5 ]; then
 fi
 
 # Execute custom JS code with wrong data in .js file
-result=$(twx eval test-wrong-data.js -pname1=Value1)
+result=$(twx eval twx-test/test-wrong-data.js -pname1=Value1)
 if [ $? -ne 5 ]; then
     printf "Eval wrong JS file - ${RED}Fail${NC}: $result\n"
     exit 1
