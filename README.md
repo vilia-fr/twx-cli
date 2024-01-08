@@ -1,30 +1,43 @@
-# ThingWorx CLI
+# Unofficial ThingWorx CLI
 
 This is a Bash script to simplify your daily ThingWorx DevOps hurdles. It
 was tested on
 
+- Ubuntu Linux 20.04
 - Ubuntu Linux 22.04
 - Alpine Linux 3.14
-- GitBash on Windows 10
+- Git Bash on Windows 10
 
-## Configure
+**IMPORTANT** This tool is developed by an independent open source community led by Vilia <vilia.fr>, 
+and is not supported, verified or endorsed by PTC Inc. in any way. Use it on your own risk and refer
+to its source code in case of doubts or questions.
 
-Install prerequisites: `curl`, `bash`, `zip`, `unzip`, `jq`.
+## Install and configure
 
-On Windows, this tool has been tested and validated using GitBash.
+Install prerequisites: `curl`, `bash`, `zip`, `unzip` and `jq`.
 
-Create a file `~/.thingworx.conf`, or a `.thingworx.conf` file in your local folder. 
-If no local config is found, then the global one in `~` will be used. The file should contains:
+On Windows, this tool has been tested and validated using Git Bash.
+
+Create a file `~/.thingworx.conf` (on Windows `~/` is the user's home directory), or
+`.thingworx.conf` file in your local folder. If no local config is found, then the global 
+one in the user HOME (`~`) will be used. The file should contain:
 
 ```bash
 # ThingWorx base URL without trailing slash /
 TWX_URL="http://localhost:8080/Thingworx"
 
-# ThingWorx appkey
+# A ThingWorx appkey, for example from SECRET_CX_APP_KEY
 TWX_APPKEY="1234-5678-9012-3456-7890"
 ```
 
-Put `twx` script on the system `PATH`.
+Put `twx` script on the system's `PATH` and make it executable by running `chmod +x twx`, 
+if needed. Complete installation sequence for CI/CD pipelines:
+
+```bash
+wget https://github.com/vilia-fr/twx-cli/raw/main/twx
+chmod +x ./twx
+sudo ln -f -s "$(pwd)/twx" /usr/local/bin/twx
+```
 
 ## Usage
 
@@ -39,6 +52,8 @@ Displays the current configuration from local directory configuration file if an
 ```bash
 twx config
 ```
+
+**WARNING** This includes the appkey in clear text.
 
 ### Importing individual entities
 
@@ -55,8 +70,8 @@ test $? -eq 0 || echo "Couldn't import MyThing.xml: $err"
 
 ### Importing multiple entities
 
-If the `import` parameter is a directory,
-all XML files in that directory will be zipped, the ZIP will be uploaded
+If the `import` parameter is a directory, then
+all XML files in that directory will be zipped, the ZIP file will be uploaded
 to `SystemRepository/tmp-<UUID>`, unzipped, and the entities will be
 then imported as Source Control. The temporary directory will be cleaned
 up regardless of the import result.
@@ -68,10 +83,10 @@ twx import repo/twx-src
 ### Importing extensions
 
 ZIP files are imported as extensions. This command ignores (returns 0 code)
-"Extension is already installed" warnings, but it will fail on other errors,
-such as "A more recent version of this extension is already installed".
+"_Extension is already installed_" warnings, but it will fail on other errors,
+such as "_A more recent version of this extension is already installed_".
 If the ZIP file contains multiple extensions, this command will fail if
-at least one of the sub-extensions fails.
+at least one of the sub-extensions fails to import.
 
 ```bash
 twx import CustomWidget-1.9.1.zip
@@ -96,23 +111,23 @@ for us, so it shouldn't be an issue.
 # A simple no-parameters service call on a Thing
 twx call Things/MyThing/Initialize
 
-# Calling a service on a Resource - creating a Thing remotely
+# Calling a service on a Resource to create a Thing remotely
 twx call Resources/EntityServices/CreateThing -pname=MyThing -pthingTemplateName=GenericThing
 ```
 
 ### Executing ThingWorx code
 
-In `eval` mode, we need to provide a JavaScript file as a `twx` parameter.
-Those JavaScript files are wrapped in a `Run` service on a `Temp-<UUID>`
-GenericThing. This Thing is imported, the service is executed, and the
-Thing is then deleted, regardless of the service execution status.
+In `eval` mode, we need to provide a JavaScript filename as a parameter.
+Twx will wrap such a file in a `Run` service on a `Temp-<UUID>` GenericThing. 
+This Thing is imported, the service is executed, and the Thing is then deleted, regardless 
+of the service execution status.
 
-We can provide parameters to this command via `-pname=value` syntax. If we
-do, then the `Run` service will also accept parameters. All parameters are
-of type STRING.
+Like in the `call` mode, we can provide parameters to this command via `-pname=value` 
+syntax. If we do, then the `Run` service will also accept parameters. All parameters are
+of type `STRING`.
 
 The `Run` service has `INTEGER` return type, which is passed as the command
-return code. This allows you to fail like that:  `var result = 1;` If you
+return code. This allows us to fail like that:  `var result = 1;` If you
 don't specify any `result` value, it will be zero, i.e. success by default.
 
 If the code throws an exception, the command returns `99` error code. The
@@ -148,17 +163,19 @@ esac
 # A oneliner remote execution
 echo "Things['Initializer'].Initialize({ version: '$VERSION' })" | twx eval
 
-# A better / safer version of the same thing
+# A better / safer version of the line above
 echo "Things['Initializer'].Initialize({ version: ver })" | twx eval -pver=$VERSION
+
+# A more straightforward version for simple scenarios
+twx call Things/Initializer/Initialize -pversion=$VERSION
 ```
 
-If you run `twx` command without any parameters, it acts as `eval` by default,
-ignoring the first line of the script, if it begins with `#` sign. It allows making
-ThingWorx JavaScript files executable and use familias `#!` syntax to run them as
+`twx eval` ignores the first line of the script, if it begins with `#!` shebang. It allows making
+ThingWorx JavaScript files executable and use familiar `#!` syntax to run them as
 native Linux commands. Consider a file called `purge`:
 
 ```javascript
-#!/bin/twx
+#!/usr/local/bin/twx eval
 
 // This is JavaScript!
 if (!name) {
@@ -191,28 +208,36 @@ for your Linux shell.
 
 ### Uploading individual files
 
-Repository[/path] is the first parameter, the file is the second:
+In `upload` mode the File Repository[/path] is the first parameter, and the source 
+filename is the second:
 
 ```bash
 twx upload SystemRepository/docs README.md
 twx upload SystemRepository root-data.txt
 ```
 
-If `path` does not exist -- it is created recursively. Existing files are
-overwritten silently.
+If `path` does not exist -- it gets created recursively. 
+
+**IMPORTANT** Existing remote files are overwritten silently.
 
 ### Downloading individual files
 
-The opposite of uploading, works for individual files for now. Directories download
-are to be added later.
-The target directory is optional. If omitted, `.` is used. Examples:
+As the name suggests, the `download` mode is the opposite of `upload`. The target 
+directory is optional. If omitted, `.` is used. Examples:
 
 ```bash
 twx download ImportDataRepository/data/history.csv
 less history.csv
+
+twx download SystemRepository/README.md ~/Downloads
 ```
 
-## TODO: Future / lower priority features
+**IMPORTANT** Existing local files are overwritten silently.
+
+## Known bugs and improvements
+
+This serves as a TODO / wishlist for the new features. Feel free to open a Pull Request
+if you'd like to contribute.
 
 ### Importing data
 
@@ -246,4 +271,34 @@ less history.csv
 twx download ImportDataRepository/data ~/Downloads
 cd ~/Downloads/data
 ls -al
+```
+
+## Contributing
+
+If you found a bug or would like to share a new feature, you can
+
+1. Create a GitHub issue,
+2. Fork this repo and open a Pull Request.
+
+There are no specific building / contributing instructions, apart from testing
+changes on two mainstream platforms -- recent Ubuntu and Windows (Git Bash).
+
+## Credits
+
+```
+TWX CLI - Unofficial ThingWorx command line utilities
+Copyright (c) 2023 Geoffrey Espagne, Vilia.
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ```

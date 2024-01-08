@@ -500,38 +500,57 @@ config_info() {
 
 help_info() {
 
-    echo "--- Usage:
-
- > twx [OPTIONS] [COMMAND] [PARAMS]"
+    echo
+    echo "Usage:  twx [OPTIONS] COMMAND [PARAMS]"
 
     echo
-    echo "--- Available commands:
-   
-import          params      -	Importing single, multiple entities or extensions.
-					As a paramameter accepts a file.xml, file.zip or directory. 
+    echo "Unofficial ThingWorx command line utilities
 
-call            params      - 	Calls service or resource from Thingworx.						
-					As a paramameter accepts a EntityType/ThingName/ServiceName -pParam1=Value1 -pParam2=Value2 			
-	
-eval            params      -	Execute custom JS code on Thingworx.
-					As a paramameter accepts file.js  -pParam1=Value1 -pParam2=Value2 	
-					If no filename is provided, the script body is taken from stdin.
+Options:
+  -v        Verbose mode. Allows user to see detailed information about the 
+            execution of twx commands. Note that the output may contain
+            credentials and parameter values in cleartext.
     
-upload          params      -	Upload file to Thingworx repository.
-					As a paramameter accepts file path on a repository FileRepositoryName/filePath
+Commands:
+
+  import    Import an extension, a single or multiple entities
+            Accepts an .xml file, a .zip file or a directory
+            Ex.: twx import entity.xml  # Imports a single entity
+                 twx import ext.zip     # Imports an extension
+                 twx import ./Entities  # Zips and imports Source Control 
+                                          entities from a directory
+
+  call      Call a service on a ThingWorx entity. Returns exit code 5 if
+            the service returns something other than HTTP 200. Echoes the 
+            service response into STDOUT.
+            Parameter syntax: <EntityType>/<EntityName>/ServiceName 
+                              -p<ParamName>=<ParamValue>
+            Ex.: twx call Resources/EntityServices/CreateThing 
+                          -pname=MyThing -pthingTemplateName=GenericThing
     
-download        params      -	Download file from Thingworx repository.
-					As a paramameter accepts file path on a repository FileRepositoryName/filePath and a local
-                    target path
+  eval      Execute a JavaScript code snippet in ThingWorx
+            Accepts a filename and an optional -p<ParamName>=<ParamValue>
+            If no filename is provided, the script body is taken from STDIN.
+            Ex.: twx eval init.js -puser=JohnDoe -ppassword=\$SECRET
+                 echo 'logger.info(msg)' | twx eval -pmsg='Hello, world!'
+    
+  upload    Upload a single file to a File Repository
+            Parameter syntax: <FileRepository>[/<filePath>] <localFile>
+            If a remote path does not exist -- it gets created recursively.
+            WARNING: Existing remote files are overwritten silently.
+            Ex.: twx upload SystemRepository/docs README.md
+                 twx upload SystemRepository root-data.txt
+    
+  download  Download a single file from Thingworx repository
+            Parameter syntax: <FileRepository>/<filePath> [<localDirectory>]
+            WARNING: Existing local files are overwritten silently.
+            Ex.: twx download ImportDataRepository/data/history.csv
+                 twx download SystemRepository/README.md ~/Downloads
 
-config                      -	Display current configuration."
-
-
-    echo
-    echo "--- Available options:
-          
--v              -	Verbose mode. Allows user to see more detailed information about the execution of twx commands"
-
+  config    Display current configuration (.thingworx.conf content)
+            WARNING: The output includes the appkey in clear text.
+            
+To get mode details check out https://github.com/vilia-fr/twx-cli"
 }
 
 ###############################################################################
