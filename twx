@@ -398,6 +398,50 @@ execute_code() {
     return ${exit_code}
 }
 
+build_ext() {
+    local exit_code=0
+    local error_exit_code=8
+
+    if [$# -lt 2]; then 
+        exit_code=$error_exit_code
+        return ${exit_code}
+    fi
+
+    local ext_src_dir="$1"
+    local ext_name="$2"
+    local ext_version="$3"
+
+    if [ -z "$3" ]; then
+        ext_version="1.0.0"
+    fi
+
+    local build_dir="./build"
+    local temp_build_dir="./build-tmp"  
+
+    local metadata_template="<?xml version=\"1.0\" encoding=\"utf-8\"?>
+    <Entities>
+        <ExtensionPackages>
+            <ExtensionPackage name=\"$ext_name\" haCompatible=\"true\" groupId=\"\" artifactId=\"\" description=\"\" vendor=\"\" packageVersion=\"$ext_version\" buildNumber=\"\" minimumThingWorxVersion=\"9.3.0\" dependsOn=\"\">
+            </ExtensionPackage>
+        </ExtensionPackages>
+    </Entities>"
+
+    if [ ! -d "$build_dir" ]; then
+        mkdir "$build_dir"
+    fi
+    mkdir "$temp_build_dir"
+    mkdir "$temp_build_dir/Entities"
+    echo "$metadata_template" > "$temp_build_dir/metadata.xml"
+    cp -r "$ext_src_dir/." "$temp_build_dir/Entities/"
+    pushd "$temp_build_dir"
+    zip "$zip_option" "$ext_name.zip" "."
+    popd
+    mv "$temp_build_dir/$ext_name.zip" "$build_dir"
+    rm -r "$temp_build_dir"
+
+    return ${exit_code}
+}
+
 upload_file() {
     local exit_code=0
     local error_exit_code=6
@@ -533,6 +577,13 @@ Commands:
             If no filename is provided, the script body is taken from STDIN.
             Ex.: twx eval init.js -puser=JohnDoe -ppassword=\$SECRET
                  echo 'logger.info(msg)' | twx eval -pmsg='Hello, world!'
+
+  build     Build a ThingWorx extension as zip file with metadata
+            Accepts a directory path, an extension name and an optional 
+            version number. If no version is provided, extension is built 
+            with version 1.0.0. The zip file will be created in a dedicated
+            'build' folder.
+            Ex.: twx build ./twx-src myExtension [1.0.8]
     
   upload    Upload a single file to a File Repository
             Parameter syntax: <FileRepository>[/<filePath>] <localFile>
@@ -582,6 +633,10 @@ elif [ "$1" == "call" ]; then
 elif [ "$1" == "eval" ]; then
     shift
     output=$(execute_code "$@")
+    exit_code=$?
+elif [ "$1" == "build" ]; then
+    shift
+    output=$(build_ext "$@")
     exit_code=$?
 elif [ "$1" == "upload" ]; then
     shift

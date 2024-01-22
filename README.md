@@ -208,6 +208,26 @@ chmod +x purge
 This provides a simple and convenient way of building a sophisticated DevOps toolbox
 for your Linux shell.
 
+### Building extension
+
+Create a ThingWorx extension, as a zip file with proper `metadata.xml`.
+
+In `build` mode the folder containing the entities to put in the extension is the first 
+parameter, and the extensin name is the second. 
+filename is the second:
+A third optional parameter can be used to specify extension version. If omitted, default
+version will be `1.0.0`.
+
+```bash
+twx build ./twx-src MyExtension
+twx build ./twx-src MyExtension 1.1.9
+```
+
+The extension will be created in a dedicated `build` folder.
+
+**IMPORTANT** If an extension with the same name already exists in the `build` folder, it will
+be overwritten silently.
+
 ### Uploading individual files
 
 In `upload` mode the File Repository[/path] is the first parameter, and the source 
