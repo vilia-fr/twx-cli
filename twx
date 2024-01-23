@@ -24,6 +24,7 @@ output=""
 is_verbose=false
 http_option="--silent"
 zip_option="-rq"
+version="1.0.1"
 
 
 ###########################################################################
@@ -293,40 +294,40 @@ call_service() {
 execute_code() {
 
     local xml_template='<?xml version="1.0" encoding="UTF-8"?>
-<Entities>
-   <Things>
-      <Thing enabled="true" name="$TEMP_NAME" thingTemplate="GenericThing">
-         <ThingShape>
-            <ServiceDefinitions>
-               <ServiceDefinition name="Run">
-                  <ResultType baseType="INTEGER" name="result" />
-                  <ParameterDefinitions>
-                     $INPUT_PARAMS
-                  </ParameterDefinitions>
-               </ServiceDefinition>
-            </ServiceDefinitions>
-            <ServiceImplementations>
-               <ServiceImplementation description="" handlerName="Script" name="Run">
-                  <ConfigurationTables>
-                     <ConfigurationTable dataShapeName="" description="" isMultiRow="false" name="Script" ordinal="0">
-                        <DataShape>
-                           <FieldDefinitions>
-                              <FieldDefinition baseType="STRING" description="code" name="code" ordinal="0" />
-                           </FieldDefinitions>
-                        </DataShape>
-                        <Rows>
-                           <Row>
-                              <code><![CDATA[$NEW_VALUE]]></code>
-                           </Row>
-                        </Rows>
-                     </ConfigurationTable>
-                  </ConfigurationTables>
-               </ServiceImplementation>
-            </ServiceImplementations>
-         </ThingShape>
-      </Thing>
-   </Things>
-</Entities>'
+    <Entities>
+        <Things>
+            <Thing enabled="true" name="$TEMP_NAME" thingTemplate="GenericThing">
+                <ThingShape>
+                    <ServiceDefinitions>
+                    <ServiceDefinition name="Run">
+                        <ResultType baseType="INTEGER" name="result" />
+                        <ParameterDefinitions>
+                            $INPUT_PARAMS
+                        </ParameterDefinitions>
+                    </ServiceDefinition>
+                    </ServiceDefinitions>
+                    <ServiceImplementations>
+                    <ServiceImplementation description="" handlerName="Script" name="Run">
+                        <ConfigurationTables>
+                            <ConfigurationTable dataShapeName="" description="" isMultiRow="false" name="Script" ordinal="0">
+                                <DataShape>
+                                <FieldDefinitions>
+                                    <FieldDefinition baseType="STRING" description="code" name="code" ordinal="0" />
+                                </FieldDefinitions>
+                                </DataShape>
+                                <Rows>
+                                <Row>
+                                    <code><![CDATA[$NEW_VALUE]]></code>
+                                </Row>
+                                </Rows>
+                            </ConfigurationTable>
+                        </ConfigurationTables>
+                    </ServiceImplementation>
+                    </ServiceImplementations>
+                </ThingShape>
+            </Thing>
+        </Things>
+    </Entities>'
 
     local exit_code=0
     local js_file_name="taken from input"
@@ -542,6 +543,10 @@ config_info() {
     echo " > TWX_APPKEY: $TWX_APPKEY"
 }
 
+version_info() {
+    echo "--- Current Thingworx cli version : $version"
+}
+
 help_info() {
 
     echo
@@ -600,6 +605,8 @@ Commands:
 
   config    Display current configuration (.thingworx.conf content)
             WARNING: The output includes the appkey in clear text.
+
+  version   Display current twx cli version
             
 To get mode details check out https://github.com/vilia-fr/twx-cli"
 }
@@ -648,6 +655,8 @@ elif [ "$1" == "download" ]; then
     exit_code=$?
 elif [ "$1" == "config" ]; then
     config_info
+elif [ "$1" == "version" ]; then
+    version_info
 elif [ "$#" -eq 0 ]; then
     help_info
 else 
