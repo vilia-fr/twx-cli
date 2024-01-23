@@ -292,49 +292,12 @@ call_service() {
 }
 
 execute_code() {
-
-    local xml_template='<?xml version="1.0" encoding="UTF-8"?>
-    <Entities>
-        <Things>
-            <Thing enabled="true" name="$TEMP_NAME" thingTemplate="GenericThing">
-                <ThingShape>
-                    <ServiceDefinitions>
-                    <ServiceDefinition name="Run">
-                        <ResultType baseType="INTEGER" name="result" />
-                        <ParameterDefinitions>
-                            $INPUT_PARAMS
-                        </ParameterDefinitions>
-                    </ServiceDefinition>
-                    </ServiceDefinitions>
-                    <ServiceImplementations>
-                    <ServiceImplementation description="" handlerName="Script" name="Run">
-                        <ConfigurationTables>
-                            <ConfigurationTable dataShapeName="" description="" isMultiRow="false" name="Script" ordinal="0">
-                                <DataShape>
-                                <FieldDefinitions>
-                                    <FieldDefinition baseType="STRING" description="code" name="code" ordinal="0" />
-                                </FieldDefinitions>
-                                </DataShape>
-                                <Rows>
-                                <Row>
-                                    <code><![CDATA[$NEW_VALUE]]></code>
-                                </Row>
-                                </Rows>
-                            </ConfigurationTable>
-                        </ConfigurationTables>
-                    </ServiceImplementation>
-                    </ServiceImplementations>
-                </ThingShape>
-            </Thing>
-        </Things>
-    </Entities>'
-
     local exit_code=0
     local js_file_name="taken from input"
     local js_file_content=""
-    UPDATE_FILE="$(mktemp /tmp/xml-XXXXX).xml"
+    local temp_file_name="$(mktemp /tmp/xml-XXXXX).xml"
 
-    export TEMP_NAME="$(basename "$UPDATE_FILE" | sed 's/.*\///;s/\..*//')"
+    local temp_entity_name="$(basename "$temp_file_name" | sed 's/.*\///;s/\..*//')"
 
     if [[ $1 == -* ]]; then
         read js_file_content
@@ -350,51 +313,87 @@ execute_code() {
     else
         code="$js_file_content"
     fi
-    export NEW_VALUE="$code"
+    local eval_code="$code"
 
     declare -A options
     if [ $# -gt 0 ]; then
         for i in "$@"; do
             if [[ $i =~ ^-p.*= ]]; then
-                OPTION_NAME="${i%=*}"
-                OPTION_NAME="${OPTION_NAME//-/}"
-                OPTION_NAME="${OPTION_NAME:1}"
-                export INPUT_PARAMS+="<FieldDefinition baseType=\"STRING\" description=\"\" name=\"$OPTION_NAME\"/>"
+                option_name="${i%=*}"
+                option_name="${option_name//-/}"
+                option_name="${option_name:1}"
+                service_input+="<FieldDefinition baseType=\"STRING\" description=\"\" name=\"$option_name\"/>"
             fi
         done
     fi
 
-    echo "$xml_template" | envsubst >"$UPDATE_FILE"
+    local xml_template="<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+    <Entities>
+        <Things>
+            <Thing enabled=\"true\" name=\"$temp_entity_name\" thingTemplate=\"GenericThing\">
+                <ThingShape>
+                    <ServiceDefinitions>
+                    <ServiceDefinition name=\"Run\">
+                        <ResultType baseType=\"INTEGER\" name=\"result\" />
+                        <ParameterDefinitions>
+                            $service_input
+                        </ParameterDefinitions>
+                    </ServiceDefinition>
+                    </ServiceDefinitions>
+                    <ServiceImplementations>
+                    <ServiceImplementation description=\"\" handlerName=\"Script\" name=\"Run\">
+                        <ConfigurationTables>
+                            <ConfigurationTable dataShapeName=\"\" description=\"\" isMultiRow=\"false\" name=\"Script\" ordinal=\"0\">
+                                <DataShape>
+                                <FieldDefinitions>
+                                    <FieldDefinition baseType=\"STRING\" description=\"code\" name=\"code\" ordinal=\"0\" />
+                                </FieldDefinitions>
+                                </DataShape>
+                                <Rows>
+                                <Row>
+                                    <code><![CDATA[$eval_code]]></code>
+                                </Row>
+                                </Rows>
+                            </ConfigurationTable>
+                        </ConfigurationTables>
+                    </ServiceImplementation>
+                    </ServiceImplementations>
+                </ThingShape>
+            </Thing>
+        </Things>
+    </Entities>"
 
-    IMPORT_JS_XML=$(import "$UPDATE_FILE")
+    echo "$xml_template" >"$temp_file_name"
+
+    import_xml=$(import "$temp_file_name")
     exit_code=$?
 
-    rm -r "$UPDATE_FILE"
+    rm -r "$temp_file_name"
 
     if [ $exit_code -eq 2 ]; then
         echo "Error importing XML with .js file $js_file_name"
     else
         PARAM_ARRAY=()
         if [ $# -eq 0 ]; then
-            CALL_JS_SERVICE=$(call_service "Things/$TEMP_NAME/Run")
+            call_js_service=$(call_service "Things/$temp_entity_name/Run")
             exit_code=$?
         else
             for i in "$@"; do
                 PARAM_ARRAY+=("$i")
             done
 
-            CALL_JS_SERVICE=$(call_service "Things/$TEMP_NAME/Run" "${PARAM_ARRAY[@]}")
+            call_js_service=$(call_service "Things/$temp_entity_name/Run" "${PARAM_ARRAY[@]}")
             exit_code=$?
         fi
 
         if [ $exit_code -ne 5 ]; then
-            echo "$CALL_JS_SERVICE"
+            echo "$call_js_service"
         else
-            echo "Error run .js file $js_file_name. Response: $CALL_JS_SERVICE"
+            echo "Error run .js file $js_file_name. Response: $call_js_service"
         fi
     fi
 
-    call_service "Resources/EntityServices/DeleteThing" "-pname=$TEMP_NAME" > /dev/null
+    call_service "Resources/EntityServices/DeleteThing" "-pname=$temp_entity_name" > /dev/null
 
     return ${exit_code}
 }
