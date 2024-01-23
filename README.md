@@ -295,6 +295,12 @@ cd ~/Downloads/data
 ls -al
 ```
 
+## Changelogs
+
+### 1.0.1
+1. Added `build` feature
+2. Added `version` feature
+
 ## Contributing
 
 If you found a bug or would like to share a new feature, you can
