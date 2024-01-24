@@ -188,12 +188,12 @@ import() {
 
         if [ "$http_status" -eq 200 ]; then
             if [ "$is_verbose" = true ]; then
-                echo "Upload success, http code ${http_status}"
+                echo "Import success, http code ${http_status}"
             else
                 echo "Success"
             fi
         else
-            echo "Couldn't upload $input_name, http code ${http_status}"
+            echo "Couldn't import $input_name, http code ${http_status}"
             exit_code=2
         fi
     fi
@@ -208,31 +208,45 @@ import_ext() {
     local input_params="$1"
     local url="$TWX_URL/ExtensionPackageUploader?purpose=import&validate=false"
 
-    local response=""
-    response=$(
-        curl -X POST "$http_option" -F "file=@$input_params" \
+    local http_status=$(
+        curl -X POST "$http_option" -o "response-import-ext.json" -w '%{http_code}' -F "file=@$input_params" \
             -H "appKey:$TWX_APPKEY" \
             -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" "$url"
     )
 
-    if [[ "$response" == "Not Acceptable" ]]; then
-        echo "Fail. Not Acceptable"
-        exit_code=8
-        exit $exit_code
-    else
-        local report_message=""
-        report_message=$(echo "$response" | jq -r '.rows[0].validate.rows[0].reportMessage')
+    local http_response=$(cat response-import-ext.json)
+    rm -r "response-import-ext.json"
 
-        if [ "$report_message" == "Extension is already installed" ]; then
-            echo "Success"
-            exit_code=0
-        elif [ "$report_message" == "" ]; then
-            echo "Success"
-            exit_code=0
+    if [ "$http_status" -eq 200 ]; then
+        local report_status=$(echo "$http_response" | jq -r '.rows[1].install.rows[0].extensionReportStatus')
+
+        if [ "$report_status" == "2" ]; then
+            echo $(echo "$http_response" | jq -r '.rows[1].install.rows[0].reportMessage')
         else
-            echo "Error installing extension $input_params, error message: $report_message"
-            exit_code=4
+            echo "Success"
         fi
+    elif [ "$http_status" -eq 406 ]; then
+        if [[ "$http_response" == "Not Acceptable" ]]; then
+            echo "Fail. Not Acceptable"
+        else
+            local report_status=$(echo "$http_response" | jq -r '.rows[0].validate.rows[0].extensionReportStatus')
+
+            if [ "$report_status" == "1" ]; then
+                echo $(echo "$http_response" | jq -r '.rows[0].validate.rows[0].reportMessage')
+            else
+                echo "Couldn't import extension $input_params, unknown error."
+            fi
+        fi
+        exit_code=$error_exit_code
+    elif [ "$http_status" -eq 401 ]; then
+        echo "Couldn't import extension $input_params, can't connect to server."
+        exit_code=$error_exit_code
+    elif [ "$http_status" -eq 000 ]; then
+        echo "Couldn't import extension $input_params, server offline."
+        exit_code=$error_exit_code
+    else
+        echo "Couldn't import extension $input_params, unknown error."
+        exit_code=$error_exit_code
     fi
 
     return ${exit_code}
