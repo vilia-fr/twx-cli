@@ -73,6 +73,18 @@ as JSON following this example:
 }
 ```
 
+Example calling `Configure` service with ThingWorx CLI:
+
+```bash
+twx call Things/Vilia.Utils.Exporter_TG/Configure -pconfiguration="{\"localizationTokenPrefix\": \"prefix\", \"projects\": [\"Test1\", \"Test2\"], \"configurationTables\": {\"thing1\": [\"table1\", \"table2\"], \"thing2\": [\"table3\"]}, \"groups\": [\"Users\"]}"
+```
+
+The service can also be executed with only partial parameters. Example:
+
+```bash
+twx call Things/Vilia.Utils.Exporter_TG/Configure -pconfiguration="{\"projects\": [\"Test1\", \"Test3\"]}"
+```
+
 ### Export
 
 Once configuration has been made in Thingworx, the export can be performed using the script `export.sh`.

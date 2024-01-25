@@ -44,10 +44,12 @@ extension_name=$(basename $extension)
 path="$(dirname "$0")/$extension"
 result=$(twx import $path)
 
-if [ $? -ne 0 ]; then
-    printf "Import extension - ${RED}Fail${NC}: $result\n"
-    exit 1
-fi
-title "< Extension $extension_name imported"
+if [ $? -eq 0 ]; then
+  title "$result"
+  title "< Extension $extension_name imported."
 
-title "Exporter utilities successfully installed"
+  title "Exporter utilities successfully installed"
+else
+  printf "Import extension - ${RED}Fail${NC}: $result\n"
+  exit 1
+fi

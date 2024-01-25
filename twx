@@ -21,7 +21,6 @@
 ###########################################################################
 exit_code=0
 output=""
-is_verbose=false
 http_option="--silent"
 zip_option="-rq"
 version="1.0.1"
@@ -204,6 +203,7 @@ import() {
 import_ext() {
     local exit_code=0
     local error_exit_code=4
+    local restart_exit_code=9
 
     local input_params="$1"
     local url="$TWX_URL/ExtensionPackageUploader?purpose=import&validate=false"
@@ -218,34 +218,45 @@ import_ext() {
     rm -r "response-import-ext.json"
 
     if [ "$http_status" -eq 200 ]; then
-        local report_status=$(echo "$http_response" | jq -r '.rows[1].install.rows[0].extensionReportStatus')
+        local validate_report_status=$(echo "$http_response" | jq -r '.rows[1].install.rows[0].extensionReportStatus')
 
-        if [ "$report_status" == "2" ]; then
+        if [ "$validate_report_status" == "2" ]; then
+            # case same version already installed
             echo $(echo "$http_response" | jq -r '.rows[1].install.rows[0].reportMessage')
         else
+            # case install success
             echo "Success"
         fi
     elif [ "$http_status" -eq 406 ]; then
         if [[ "$http_response" == "Not Acceptable" ]]; then
-            echo "Fail. Not Acceptable"
+            # case extension malformed
+            echo "Error: Import extension failed. Not Acceptable."
+            exit_code=$error_exit_code
         else
-            local report_status=$(echo "$http_response" | jq -r '.rows[0].validate.rows[0].extensionReportStatus')
+            local validate_report_status=$(echo "$http_response" | jq -r '.rows[0].validate.rows[0].extensionReportStatus')
 
-            if [ "$report_status" == "1" ]; then
+            if [ "$validate_report_status" == "1" ]; then
+                # case newer version already installed
                 echo $(echo "$http_response" | jq -r '.rows[0].validate.rows[0].reportMessage')
+                exit_code=$error_exit_code
+            elif [ "$validate_report_status" == "0" ] || [ "$validate_report_status" == "2" ]; then
+                # case ext need server restart. 0 is minor or patch version change. 2 is major version change.
+                echo $(echo "$http_response" | jq -r '.rows[1].install.rows[0].reportMessage')
+                exit_code=$restart_exit_code
             else
-                echo "Couldn't import extension $input_params, unknown error."
+                # default case
+                echo "Error: Couldn't import extension $input_params, unknown error."
+                exit_code=$error_exit_code
             fi
-        fi
-        exit_code=$error_exit_code
+        fi     
     elif [ "$http_status" -eq 401 ]; then
-        echo "Couldn't import extension $input_params, can't connect to server."
+        echo "Error: Couldn't import extension $input_params, can't connect to server."
         exit_code=$error_exit_code
     elif [ "$http_status" -eq 000 ]; then
-        echo "Couldn't import extension $input_params, server offline."
+        echo "Error: Couldn't import extension $input_params, server offline."
         exit_code=$error_exit_code
     else
-        echo "Couldn't import extension $input_params, unknown error."
+        echo "Error: Couldn't import extension $input_params, unknown error."
         exit_code=$error_exit_code
     fi
 
@@ -416,7 +427,7 @@ build_ext() {
     local exit_code=0
     local error_exit_code=8
 
-    if [$# -lt 2]; then 
+    if [$# -lt 3]; then 
         exit_code=$error_exit_code
         return ${exit_code}
     fi
@@ -424,13 +435,9 @@ build_ext() {
     local ext_src_dir="$1"
     local ext_name="$2"
     local ext_version="$3"
+    local ext_zip_name="$2"_"$3.zip"
 
-    if [ -z "$3" ]; then
-        ext_version="1.0.0"
-    fi
-
-    local build_dir="./build"
-    local temp_build_dir="./build-tmp"  
+    local temp_build_dir=$(mktemp -d -t tmp-build-XXXXXX)
 
     local metadata_template="<?xml version=\"1.0\" encoding=\"utf-8\"?>
     <Entities>
@@ -440,17 +447,13 @@ build_ext() {
         </ExtensionPackages>
     </Entities>"
 
-    if [ ! -d "$build_dir" ]; then
-        mkdir "$build_dir"
-    fi
-    mkdir "$temp_build_dir"
     mkdir "$temp_build_dir/Entities"
     echo "$metadata_template" > "$temp_build_dir/metadata.xml"
     cp -r "$ext_src_dir/." "$temp_build_dir/Entities/"
     pushd "$temp_build_dir"
-    zip "$zip_option" "$ext_name.zip" "."
+    zip "$zip_option" "$ext_zip_name" "."
     popd
-    mv "$temp_build_dir/$ext_name.zip" "$build_dir"
+    mv "$temp_build_dir/$ext_zip_name" "."
     rm -r "$temp_build_dir"
 
     return ${exit_code}
@@ -557,7 +560,7 @@ config_info() {
 }
 
 version_info() {
-    echo "--- Current Thingworx cli version : $version"
+    echo "ThingWorx CLI $version"
 }
 
 help_info() {
@@ -597,10 +600,9 @@ Commands:
                  echo 'logger.info(msg)' | twx eval -pmsg='Hello, world!'
 
   build     Build a ThingWorx extension as zip file with metadata
-            Accepts a directory path, an extension name and an optional 
-            version number. If no version is provided, extension is built 
-            with version 1.0.0. The zip file will be created in a dedicated
-            'build' folder.
+            Accepts a directory path, an extension name and a 
+            version number. The zip file will be created in the current 
+            folder.
             Ex.: twx build ./twx-src myExtension [1.0.8]
     
   upload    Upload a single file to a File Repository
@@ -619,7 +621,7 @@ Commands:
   config    Display current configuration (.thingworx.conf content)
             WARNING: The output includes the appkey in clear text.
 
-  version   Display current twx cli version
+  version   Display current ThingWorx CLI version
             
 To get mode details check out https://github.com/vilia-fr/twx-cli"
 }
