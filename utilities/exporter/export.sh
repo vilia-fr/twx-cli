@@ -61,16 +61,17 @@ title "Export step 4: Download sources"
 twx download "$export_repository/twx-src.zip"
 
 title "Export step 5: Extract sources"
-rm -rf ./tmp/
-unzip "twx-src.zip" -d "./tmp/"
+temp_src_dir=$(mktemp -d -t tmp-src-XXXXXX)
+unzip "twx-src.zip" -d "$temp_src_dir"
 rm twx-src.zip
 
-title "Export step 6: Cleanup local sources"
+echo "$temp_src_dir"
+
+# title "Export step 6: Cleanup local sources"
 rm -rf "./twx-src"
 
-title "Export step 7: Copy sources"
-mv "tmp/${remote_export_folder}/" "."
-mv "${remote_export_folder}" "twx-src"
-rm -rf ./tmp/
+# title "Export step 7: Copy sources"
+mv "$temp_src_dir/${remote_export_folder}/" "twx-src"
+rm -rf "$temp_src_dir"
 
 title "Export completed successfully"
