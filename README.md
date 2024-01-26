@@ -100,6 +100,12 @@ Importing all extensions in a given directory in the alphabetical order:
 for EXT in *.zip; do twx import $EXT; done
 ```
 
+**IMPORTANT** If an extension is installed successfully or if it's already installed 
+with the same version, exit code will be `0`. 
+If installation requires a server restart (in case of Java extension), exit code will be `9`.
+Every other case will return a non-zero exit code. This is particularly important in the case 
+the extension cannot be installed because an newer version of the extension is already installed.
+
 ### Calling services
 
 The `call` command uses an intuitive syntax for calling services. It supports
@@ -208,6 +214,26 @@ chmod +x purge
 This provides a simple and convenient way of building a sophisticated DevOps toolbox
 for your Linux shell.
 
+### Building extension
+Create a ThingWorx extension, as a zip file with proper `metadata.xml`.
+
+In `build` mode the folder containing the entities to put in the extension is the first 
+parameter, and the extension name is the second. A third parameter is used to specify extension 
+version.
+
+The extension will be created in a dedicated the current folder, with the zip name created from
+input name and version.
+
+For example, the below command will create a zip file name `MyExtension_1.1.9.zip` in the current 
+folder, containing the entities located in the `twx-src` folder:
+
+```bash
+twx build ./twx-src "MyExtension" "1.1.9"
+```
+
+**IMPORTANT** If an extension with the same name already exists in the current folder, it will
+be overwritten silently.
+
 ### Uploading individual files
 
 In `upload` mode the File Repository[/path] is the first parameter, and the source 
@@ -262,18 +288,22 @@ twx upload ImportDataRepository/data ~/CSVs
 
 ### Downloading directories
 
-The opposite of uploading, works for both individual files and directories
-(the files are zipped, downloaded and unzipped in the latter case). The target
-directory is optional. If omitted, `.` is used. Examples:
+The opposite of uploading for directories (the files are zipped, downloaded 
+and unzipped in the latter case). The target directory is optional.
+If omitted, `.` is used. Example:
 
 ```bash
-twx download ImportDataRepository/data/history.csv
-less history.csv
-
 twx download ImportDataRepository/data ~/Downloads
 cd ~/Downloads/data
 ls -al
 ```
+
+## Changelogs
+
+### 1.0.1
+1. Added `build` feature
+2. Added `version` feature
+3. Updated error handling and exit codes for `import` feature when importing extensions
 
 ## Contributing
 

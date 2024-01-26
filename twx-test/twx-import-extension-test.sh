@@ -30,7 +30,7 @@ fi
 result=$(twx import twx-test/twx-test-wrong-data-ext.zip)
 
 if [ $? -eq 0 ]; then
-    printf "Import wrong exstension - ${RED}Fail${NC}\n"
+    printf "Import wrong extension - ${RED}Fail${NC}\n"
     exit 1
 fi
 

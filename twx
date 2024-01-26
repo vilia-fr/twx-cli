@@ -21,9 +21,9 @@
 ###########################################################################
 exit_code=0
 output=""
-is_verbose=false
 http_option="--silent"
 zip_option="-rq"
+version="1.0.1"
 
 
 ###########################################################################
@@ -187,12 +187,12 @@ import() {
 
         if [ "$http_status" -eq 200 ]; then
             if [ "$is_verbose" = true ]; then
-                echo "Upload success, http code ${http_status}"
+                echo "Import success, http code ${http_status}"
             else
                 echo "Success"
             fi
         else
-            echo "Couldn't upload $input_name, http code ${http_status}"
+            echo "Couldn't import $input_name, http code ${http_status}"
             exit_code=2
         fi
     fi
@@ -203,35 +203,61 @@ import() {
 import_ext() {
     local exit_code=0
     local error_exit_code=4
+    local restart_exit_code=9
 
     local input_params="$1"
     local url="$TWX_URL/ExtensionPackageUploader?purpose=import&validate=false"
 
-    local response=""
-    response=$(
-        curl -X POST "$http_option" -F "file=@$input_params" \
+    local http_status=$(
+        curl -X POST "$http_option" -o "response-import-ext.json" -w '%{http_code}' -F "file=@$input_params" \
             -H "appKey:$TWX_APPKEY" \
             -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" "$url"
     )
 
-    if [[ "$response" == "Not Acceptable" ]]; then
-        echo "Fail. Not Acceptable"
-        exit_code=8
-        exit $exit_code
-    else
-        local report_message=""
-        report_message=$(echo "$response" | jq -r '.rows[0].validate.rows[0].reportMessage')
+    local http_response=$(cat response-import-ext.json)
+    rm -r "response-import-ext.json"
 
-        if [ "$report_message" == "Extension is already installed" ]; then
-            echo "Success"
-            exit_code=0
-        elif [ "$report_message" == "" ]; then
-            echo "Success"
-            exit_code=0
+    if [ "$http_status" -eq 200 ]; then
+        local validate_report_status=$(echo "$http_response" | jq -r '.rows[1].install.rows[0].extensionReportStatus')
+
+        if [ "$validate_report_status" == "2" ]; then
+            # case same version already installed
+            echo $(echo "$http_response" | jq -r '.rows[1].install.rows[0].reportMessage')
         else
-            echo "Error installing extension $input_params, error message: $report_message"
-            exit_code=4
+            # case install success
+            echo "Success"
         fi
+    elif [ "$http_status" -eq 406 ]; then
+        if [[ "$http_response" == "Not Acceptable" ]]; then
+            # case extension malformed
+            echo "Error: Import extension failed. Not Acceptable."
+            exit_code=$error_exit_code
+        else
+            local validate_report_status=$(echo "$http_response" | jq -r '.rows[0].validate.rows[0].extensionReportStatus')
+
+            if [ "$validate_report_status" == "1" ]; then
+                # case newer version already installed
+                echo $(echo "$http_response" | jq -r '.rows[0].validate.rows[0].reportMessage')
+                exit_code=$error_exit_code
+            elif [ "$validate_report_status" == "0" ] || [ "$validate_report_status" == "2" ]; then
+                # case ext need server restart. 0 is minor or patch version change. 2 is major version change.
+                echo $(echo "$http_response" | jq -r '.rows[1].install.rows[0].reportMessage')
+                exit_code=$restart_exit_code
+            else
+                # default case
+                echo "Error: Couldn't import extension $input_params, unknown error."
+                exit_code=$error_exit_code
+            fi
+        fi     
+    elif [ "$http_status" -eq 401 ]; then
+        echo "Error: Couldn't import extension $input_params, can't connect to server."
+        exit_code=$error_exit_code
+    elif [ "$http_status" -eq 000 ]; then
+        echo "Error: Couldn't import extension $input_params, server offline."
+        exit_code=$error_exit_code
+    else
+        echo "Error: Couldn't import extension $input_params, unknown error."
+        exit_code=$error_exit_code
     fi
 
     return ${exit_code}
@@ -291,49 +317,12 @@ call_service() {
 }
 
 execute_code() {
-
-    local xml_template='<?xml version="1.0" encoding="UTF-8"?>
-<Entities>
-   <Things>
-      <Thing enabled="true" name="$TEMP_NAME" thingTemplate="GenericThing">
-         <ThingShape>
-            <ServiceDefinitions>
-               <ServiceDefinition name="Run">
-                  <ResultType baseType="INTEGER" name="result" />
-                  <ParameterDefinitions>
-                     $INPUT_PARAMS
-                  </ParameterDefinitions>
-               </ServiceDefinition>
-            </ServiceDefinitions>
-            <ServiceImplementations>
-               <ServiceImplementation description="" handlerName="Script" name="Run">
-                  <ConfigurationTables>
-                     <ConfigurationTable dataShapeName="" description="" isMultiRow="false" name="Script" ordinal="0">
-                        <DataShape>
-                           <FieldDefinitions>
-                              <FieldDefinition baseType="STRING" description="code" name="code" ordinal="0" />
-                           </FieldDefinitions>
-                        </DataShape>
-                        <Rows>
-                           <Row>
-                              <code><![CDATA[$NEW_VALUE]]></code>
-                           </Row>
-                        </Rows>
-                     </ConfigurationTable>
-                  </ConfigurationTables>
-               </ServiceImplementation>
-            </ServiceImplementations>
-         </ThingShape>
-      </Thing>
-   </Things>
-</Entities>'
-
     local exit_code=0
     local js_file_name="taken from input"
     local js_file_content=""
-    UPDATE_FILE="$(mktemp /tmp/xml-XXXXX).xml"
+    local temp_file_name="$(mktemp /tmp/xml-XXXXX).xml"
 
-    export TEMP_NAME="$(basename "$UPDATE_FILE" | sed 's/.*\///;s/\..*//')"
+    local temp_entity_name="$(basename "$temp_file_name" | sed 's/.*\///;s/\..*//')"
 
     if [[ $1 == -* ]]; then
         read js_file_content
@@ -349,51 +338,123 @@ execute_code() {
     else
         code="$js_file_content"
     fi
-    export NEW_VALUE="$code"
+    local eval_code="$code"
 
     declare -A options
     if [ $# -gt 0 ]; then
         for i in "$@"; do
             if [[ $i =~ ^-p.*= ]]; then
-                OPTION_NAME="${i%=*}"
-                OPTION_NAME="${OPTION_NAME//-/}"
-                OPTION_NAME="${OPTION_NAME:1}"
-                export INPUT_PARAMS+="<FieldDefinition baseType=\"STRING\" description=\"\" name=\"$OPTION_NAME\"/>"
+                option_name="${i%=*}"
+                option_name="${option_name//-/}"
+                option_name="${option_name:1}"
+                service_input+="<FieldDefinition baseType=\"STRING\" description=\"\" name=\"$option_name\"/>"
             fi
         done
     fi
 
-    echo "$xml_template" | envsubst >"$UPDATE_FILE"
+    local xml_template="<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+    <Entities>
+        <Things>
+            <Thing enabled=\"true\" name=\"$temp_entity_name\" thingTemplate=\"GenericThing\">
+                <ThingShape>
+                    <ServiceDefinitions>
+                    <ServiceDefinition name=\"Run\">
+                        <ResultType baseType=\"INTEGER\" name=\"result\" />
+                        <ParameterDefinitions>
+                            $service_input
+                        </ParameterDefinitions>
+                    </ServiceDefinition>
+                    </ServiceDefinitions>
+                    <ServiceImplementations>
+                    <ServiceImplementation description=\"\" handlerName=\"Script\" name=\"Run\">
+                        <ConfigurationTables>
+                            <ConfigurationTable dataShapeName=\"\" description=\"\" isMultiRow=\"false\" name=\"Script\" ordinal=\"0\">
+                                <DataShape>
+                                <FieldDefinitions>
+                                    <FieldDefinition baseType=\"STRING\" description=\"code\" name=\"code\" ordinal=\"0\" />
+                                </FieldDefinitions>
+                                </DataShape>
+                                <Rows>
+                                <Row>
+                                    <code><![CDATA[$eval_code]]></code>
+                                </Row>
+                                </Rows>
+                            </ConfigurationTable>
+                        </ConfigurationTables>
+                    </ServiceImplementation>
+                    </ServiceImplementations>
+                </ThingShape>
+            </Thing>
+        </Things>
+    </Entities>"
 
-    IMPORT_JS_XML=$(import "$UPDATE_FILE")
+    echo "$xml_template" >"$temp_file_name"
+
+    import_xml=$(import "$temp_file_name")
     exit_code=$?
 
-    rm -r "$UPDATE_FILE"
+    rm -r "$temp_file_name"
 
     if [ $exit_code -eq 2 ]; then
         echo "Error importing XML with .js file $js_file_name"
     else
         PARAM_ARRAY=()
         if [ $# -eq 0 ]; then
-            CALL_JS_SERVICE=$(call_service "Things/$TEMP_NAME/Run")
+            call_js_service=$(call_service "Things/$temp_entity_name/Run")
             exit_code=$?
         else
             for i in "$@"; do
                 PARAM_ARRAY+=("$i")
             done
 
-            CALL_JS_SERVICE=$(call_service "Things/$TEMP_NAME/Run" "${PARAM_ARRAY[@]}")
+            call_js_service=$(call_service "Things/$temp_entity_name/Run" "${PARAM_ARRAY[@]}")
             exit_code=$?
         fi
 
         if [ $exit_code -ne 5 ]; then
-            echo "$CALL_JS_SERVICE"
+            echo "$call_js_service"
         else
-            echo "Error run .js file $js_file_name. Response: $CALL_JS_SERVICE"
+            echo "Error run .js file $js_file_name. Response: $call_js_service"
         fi
     fi
 
-    call_service "Resources/EntityServices/DeleteThing" "-pname=$TEMP_NAME" > /dev/null
+    call_service "Resources/EntityServices/DeleteThing" "-pname=$temp_entity_name" > /dev/null
+
+    return ${exit_code}
+}
+
+build_ext() {
+    local exit_code=0
+    local error_exit_code=8
+
+    if [$# -lt 3]; then 
+        exit_code=$error_exit_code
+        return ${exit_code}
+    fi
+
+    local ext_src_dir="$1"
+    local ext_name="$2"
+    local ext_version="$3"
+    local ext_zip_name="$2"_"$3.zip"
+
+    local temp_build_dir=$(mktemp -d -t tmp-build-XXXXXX)
+
+    local metadata_template="<?xml version=\"1.0\" encoding=\"utf-8\"?>
+    <Entities>
+        <ExtensionPackages>
+            <ExtensionPackage name=\"$ext_name\" haCompatible=\"true\" groupId=\"\" artifactId=\"\" description=\"\" vendor=\"\" packageVersion=\"$ext_version\" buildNumber=\"\" minimumThingWorxVersion=\"9.3.0\" dependsOn=\"\">
+            </ExtensionPackage>
+        </ExtensionPackages>
+    </Entities>"
+
+    mkdir "$temp_build_dir/Entities"
+    echo "$metadata_template" > "$temp_build_dir/metadata.xml"
+    cp -r "$ext_src_dir/." "$temp_build_dir/Entities/"
+    pushd "$temp_build_dir"
+    zip "$zip_option" "$ext_zip_name" "."
+    popd
+    mv "$temp_build_dir/$ext_zip_name" "."
+    rm -r "$temp_build_dir"
 
     return ${exit_code}
 }
@@ -498,6 +559,10 @@ config_info() {
     echo " > TWX_APPKEY: $TWX_APPKEY"
 }
 
+version_info() {
+    echo "ThingWorx CLI $version"
+}
+
 help_info() {
 
     echo
@@ -533,6 +598,12 @@ Commands:
             If no filename is provided, the script body is taken from STDIN.
             Ex.: twx eval init.js -puser=JohnDoe -ppassword=\$SECRET
                  echo 'logger.info(msg)' | twx eval -pmsg='Hello, world!'
+
+  build     Build a ThingWorx extension as zip file with metadata
+            Accepts a directory path, an extension name and a 
+            version number. The zip file will be created in the current 
+            folder.
+            Ex.: twx build ./twx-src myExtension [1.0.8]
     
   upload    Upload a single file to a File Repository
             Parameter syntax: <FileRepository>[/<filePath>] <localFile>
@@ -549,8 +620,10 @@ Commands:
 
   config    Display current configuration (.thingworx.conf content)
             WARNING: The output includes the appkey in clear text.
+
+  version   Display current ThingWorx CLI version
             
-To get mode details check out https://github.com/vilia-fr/twx-cli"
+To get more details check out https://github.com/vilia-fr/twx-cli"
 }
 
 ###############################################################################
@@ -583,6 +656,10 @@ elif [ "$1" == "eval" ]; then
     shift
     output=$(execute_code "$@")
     exit_code=$?
+elif [ "$1" == "build" ]; then
+    shift
+    output=$(build_ext "$@")
+    exit_code=$?
 elif [ "$1" == "upload" ]; then
     shift
     output=$(upload_file "$@")
@@ -593,6 +670,8 @@ elif [ "$1" == "download" ]; then
     exit_code=$?
 elif [ "$1" == "config" ]; then
     config_info
+elif [ "$1" == "version" ]; then
+    version_info
 elif [ "$#" -eq 0 ]; then
     help_info
 else 
