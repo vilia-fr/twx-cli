@@ -24,6 +24,7 @@ output=""
 http_option="--silent"
 zip_option="-rq"
 version="1.0.1"
+use_appkey=0
 
 
 ###########################################################################
@@ -90,7 +91,7 @@ check_configuration() {
     local exit_code=0
     local error_exit_code=2
 
-    if [ -n "$TWX_APPKEY" ] && [ -n "$TWX_URL" ]; then
+    if ([ -n "$TWX_APPKEY" ] || ([ -n "$TWX_USER" ] && [ -n "$TWX_PASSWORD" ])) && [ -n "$TWX_URL" ]; then
         echo "Continuing..."
     else
         if [ -f ./.thingworx.conf ]; then
@@ -103,14 +104,20 @@ check_configuration() {
         fi
 
         if [ -z "$TWX_APPKEY" ]; then
-            echo "Error: TWX_APPKEY variable is empty. Set TWX_APPKEY variable in ~/.thingworx.conf file."
-            exit $error_exit_code
+            if [ -z "$TWX_USER" ] || [ -z "$TWX_PASSWORD" ]; then
+                echo "Error: No valid authentication method detected. Set TWX_APPKEY or TWX_USER/TWX_PASSWORD variable(s) in ~/.thingworx.conf file."
+                exit $error_exit_code
+            fi
         fi
 
         if [ -z "$TWX_URL" ]; then
             echo "Error: TWX_URL variable is empty. Set TWX_URL variable in ~/.thingworx.conf file."
             exit $error_exit_code
         fi
+    fi
+
+    if [ -n "$TWX_APPKEY" ]; then
+        use_appkey=1
     fi
 
     return ${exit_code} 
@@ -175,13 +182,25 @@ import() {
         #Import single entity
         local url="$TWX_URL/Importer?purpose=import"
 
-        local http_code_response=$(
-            curl -X POST "$http_option" -F "file=@$input_name" \
-                -H "appKey:$TWX_APPKEY" \
-                -H "Accept: text/xml" \
-                -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" \
-                -w 'HTTPSTATUS:%{http_code}' "$url"
-        )
+        local http_code_response
+
+        if [ $use_appkey -eq "1" ]; then
+            http_code_response=$(
+                MSYS_NO_PATHCONV=1 curl -X POST "$http_option" -F "file=@$input_name" \
+                    -H "appKey:$TWX_APPKEY" \
+                    -H "Accept: text/xml" \
+                    -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" \
+                    -w 'HTTPSTATUS:%{http_code}' "$url"
+            )
+        else
+            http_code_response=$(
+                MSYS_NO_PATHCONV=1 curl -X POST "$http_option" -F "file=@$input_name" \
+                    -H "Accept: text/xml" \
+                    -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" \
+                    -u "$TWX_USER:$TWX_PASSWORD" \
+                    -w 'HTTPSTATUS:%{http_code}' "$url"
+            )
+        fi        
 
         local http_status=$(echo "$http_code_response" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
 
@@ -208,11 +227,21 @@ import_ext() {
     local input_params="$1"
     local url="$TWX_URL/ExtensionPackageUploader?purpose=import&validate=false"
 
-    local http_status=$(
-        curl -X POST "$http_option" -o "response-import-ext.json" -w '%{http_code}' -F "file=@$input_params" \
-            -H "appKey:$TWX_APPKEY" \
-            -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" "$url"
-    )
+    local http_status
+
+    if [ $use_appkey -eq "1" ]; then
+        http_status=$(
+            MSYS_NO_PATHCONV=1 curl -X POST "$http_option" -o "response-import-ext.json" -w '%{http_code}' -F "file=@$input_params" \
+                -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" "$url" \
+                -H "appKey:$TWX_APPKEY"       
+        )
+    else
+        http_status=$(
+            MSYS_NO_PATHCONV=1 curl -X POST "$http_option" -o "response-import-ext.json" -w '%{http_code}' -F "file=@$input_params" \
+                -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" "$url" \
+                -u "$TWX_USER:$TWX_PASSWORD"
+        )
+    fi    
 
     local http_response=$(cat response-import-ext.json)
     rm -r "response-import-ext.json"
@@ -294,13 +323,27 @@ call_service() {
         echo "Will call '$TWX_URL/$entity_type/$entity_name/Services/$service_name'"
     fi
 
-    local http_response=$(
-        curl -X POST "$http_option" -o "response.json" -w '%{http_code}' "$TWX_URL/$entity_type/$entity_name/Services/$service_name" \
-            -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
-            -H "Content-Type: application/json" \
-            -H "Accept: application/json" \
-            -d "$(create_json_body)"
-    )
+    local http_response
+
+    if [ $use_appkey -eq "1" ]; then
+        http_response=$(
+            MSYS_NO_PATHCONV=1 curl -X POST "$http_option" -o "response.json" -w '%{http_code}' "$TWX_URL/$entity_type/$entity_name/Services/$service_name" \
+                -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE"  \
+                -H "AppKey: $TWX_APPKEY" \
+                -H "Content-Type: application/json" \
+                -H "Accept: application/json" \
+                -d "$(create_json_body)"
+        )
+    else
+        http_response=$(
+            MSYS_NO_PATHCONV=1 curl -X POST "$http_option" -o "response.json" -w '%{http_code}' "$TWX_URL/$entity_type/$entity_name/Services/$service_name" \
+                -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE"  \
+                -H "Content-Type: application/json" \
+                -H "Accept: application/json" \
+                -u "$TWX_USER:$TWX_PASSWORD" \
+                -d "$(create_json_body)"
+        )
+    fi
 
     local http_body=$(cat response.json)
     local http_status=$http_response
@@ -427,7 +470,7 @@ build_ext() {
     local exit_code=0
     local error_exit_code=8
 
-    if [$# -lt 3]; then 
+    if [$# -ne 3]; then 
         exit_code=$error_exit_code
         return ${exit_code}
     fi
@@ -484,14 +527,29 @@ upload_file() {
         exit $error_exit_code
     fi
 
-    local http_status_code_upload=$(
-        curl -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" -H "AppKey: $TWX_APPKEY" \
-            -F "upload-repository=$repository" \
-            -F "upload-path=\"$remote_path\"" \
-            -F "upload-submit=Upload" \
-            -F "file=@$local_file_path;type=application/x-zip-compressed" \
-            --write-out "%{http_code}" "$http_option" --output /dev/null "$TWX_URL/FileRepositoryUploader"
-    )
+    local http_status_code_upload
+
+    if [ $use_appkey -eq "1" ]; then
+        http_status_code_upload=$(
+            MSYS_NO_PATHCONV=1 curl -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" \
+                -H "AppKey: $TWX_APPKEY" \
+                -F "upload-repository=$repository" \
+                -F "upload-path=\"$remote_path\"" \
+                -F "upload-submit=Upload" \
+                -F "file=@$local_file_path;type=application/x-zip-compressed" \
+                --write-out "%{http_code}" "$http_option" --output /dev/null "$TWX_URL/FileRepositoryUploader"
+        )
+    else
+        http_status_code_upload=$(
+            MSYS_NO_PATHCONV=1 curl -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" \
+                -u "$TWX_USER:$TWX_PASSWORD" \
+                -F "upload-repository=$repository" \
+                -F "upload-path=\"$remote_path\"" \
+                -F "upload-submit=Upload" \
+                -F "file=@$local_file_path;type=application/x-zip-compressed" \
+                --write-out "%{http_code}" "$http_option" --output /dev/null "$TWX_URL/FileRepositoryUploader"
+        )
+    fi
 
     if [ "$http_status_code_upload" -eq 200 ]; then
         if [ $is_verbose = true ]; then
@@ -530,12 +588,23 @@ download_file() {
         echo "Repository ${repository}"
     fi
 
-    local http_status_code=$(
-        MSYS_NO_PATHCONV=1 curl -X GET -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" \
-        -H "AppKey: $TWX_APPKEY" \
-        "$full_url" \
-        -s -o "$base_filename" -w "%{http_code}"
-    )
+    local http_status_code
+
+    if [ $use_appkey -eq "1" ]; then
+        http_status_code=$(
+            MSYS_NO_PATHCONV=1 curl -X GET -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" \
+            -H "AppKey: $TWX_APPKEY" \
+            "$full_url" \
+            -s -o "$base_filename" -w "%{http_code}"
+        )
+    else
+        http_status_code=$(
+            MSYS_NO_PATHCONV=1 curl -X GET -H "X-XSRF-TOKEN: TWX-XSRF-TOKEN-VALUE" \
+            -u "$TWX_USER:$TWX_PASSWORD" \
+            "$full_url" \
+            -s -o "$base_filename" -w "%{http_code}"
+        )
+    fi
 
     if [ "200" != "${http_status_code}" ]; then
         echo "Failed to download ${file_path}, with http code ${http_status_code}"
@@ -557,6 +626,8 @@ config_info() {
     echo
     echo " > TWX_URL: $TWX_URL"
     echo " > TWX_APPKEY: $TWX_APPKEY"
+    echo " > TWX_USER: $TWX_USER"
+    echo " > TWX_PASSWORD: *******"
 }
 
 version_info() {
