@@ -23,7 +23,7 @@ exit_code=0
 output=""
 http_option="--silent"
 zip_option="-rq"
-version="1.0.1"
+version="1.0.2"
 use_appkey=0
 
 
