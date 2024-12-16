@@ -25,6 +25,7 @@ http_option="--silent"
 zip_option="-rq"
 version="1.0.2"
 use_appkey=0
+logfile_name=""
 
 
 ###########################################################################
@@ -32,7 +33,6 @@ use_appkey=0
 ###########################################################################
 
 create_json_body() {
-
     local json_body="{"
     for key in "${!options[@]}"; do
         if jq -e . >/dev/null 2>&1 <<<"${options[$key]}"; then
@@ -47,16 +47,47 @@ create_json_body() {
     echo "$json_body"
 }
 
+# Custom echo to also log in file if verbose
+log() {
+    local message="$1"
+    echo "$message"
+    log_verbose "$message"
+}
+
+# Log in file
+log_verbose() {
+    local message="$1"
+    if [ "$is_verbose" = true ]; then
+        echo "$message" >> "$logfile_name"
+    fi
+}
+
 # Set verbose mode
 set_verbose() {
+    local exit_code=0
+    local error_exit_code=10
+
     if [ "$1" = 1 ]; then
         is_verbose=true
-        http_option="--verbose"
+        # TODO: deactivated as curl verbose is awalys displayed in terminal
+        # http_option="--verbose"
+        http_option="--silent"
         zip_option="-rv"
+
+        base_name=$(echo "$2" | tail -c +4)
+        if [ -z "${base_name}" ]; then
+            help_info
+            exit $error_exit_code
+        fi
+
+        logfile_name="$base_name"
+        echo "" > "$logfile_name"
     else
         is_verbose=false
         http_option="--silent"
         zip_option="-rq"
+
+        logfile_name=""
     fi
 }
 
@@ -92,26 +123,26 @@ check_configuration() {
     local error_exit_code=2
 
     if ([ -n "$TWX_APPKEY" ] || ([ -n "$TWX_USER" ] && [ -n "$TWX_PASSWORD" ])) && [ -n "$TWX_URL" ]; then
-        echo "Continuing..."
+        log_verbose "Continuing..."
     else
         if [ -f ./.thingworx.conf ]; then
             source ./.thingworx.conf
         elif [ -f ~/.thingworx.conf ]; then
             source ~/.thingworx.conf
         else 
-            echo "Error: No configuration file detected."
+            log "Error: No configuration file detected."
             exit $error_exit_code
         fi
 
         if [ -z "$TWX_APPKEY" ]; then
             if [ -z "$TWX_USER" ] || [ -z "$TWX_PASSWORD" ]; then
-                echo "Error: No valid authentication method detected. Set TWX_APPKEY or TWX_USER/TWX_PASSWORD variable(s) in ~/.thingworx.conf file."
+                log "Error: No valid authentication method detected. Set TWX_APPKEY or TWX_USER/TWX_PASSWORD variable(s) in ~/.thingworx.conf file."
                 exit $error_exit_code
             fi
         fi
 
         if [ -z "$TWX_URL" ]; then
-            echo "Error: TWX_URL variable is empty. Set TWX_URL variable in ~/.thingworx.conf file."
+            log "Error: TWX_URL variable is empty. Set TWX_URL variable in ~/.thingworx.conf file."
             exit $error_exit_code
         fi
     fi
@@ -148,7 +179,7 @@ import() {
         rm "$tmp_zip"
 
         if [ $exit_code -eq 6 ]; then
-            echo "Couldn't upload $tmp_zip,"
+            log "Error: Couldn't upload $tmp_zip,"
             exit "$exit_code" 
         fi
 
@@ -157,8 +188,7 @@ import() {
         exit_code=$?
 
         if [ $exit_code -eq 5 ]; then
-            echo "Couldn't extract $input_name,"
-            echo "$extract_zip"
+            log "Error: Couldn't extract $input_name, error: $extract_zip"
             exit "$exit_code"
         fi
 
@@ -167,7 +197,7 @@ import() {
         exit_code=$?
 
         if [ $exit_code -eq 5 ]; then
-            echo "Couldn't import $input_name, response $import_xml\n"
+            log "Error: Couldn't import $input_name, response $import_xml\n"
         fi
 
         #Delete folders
@@ -175,7 +205,7 @@ import() {
         call_service "Things/SystemRepository/DeleteFolder" "-ppath=$folder_name" >/dev/null
 
         if [ $exit_code -eq 0 ]; then
-            echo "Success"
+            log "Success: $input_name successfully imported."
         fi
 
     else
@@ -205,13 +235,10 @@ import() {
         local http_status=$(echo "$http_code_response" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
 
         if [ "$http_status" -eq 200 ]; then
-            if [ "$is_verbose" = true ]; then
-                echo "Import success, http code ${http_status}"
-            else
-                echo "Success"
-            fi
+            log "Success: $input_name successfully imported."
+            log_verbose "Import success, http code ${http_status}"
         else
-            echo "Couldn't import $input_name, http code ${http_status}"
+            log "Error: Couldn't import $input_name, http code ${http_status}"
             exit_code=2
         fi
     fi
@@ -251,41 +278,42 @@ import_ext() {
 
         if [ "$validate_report_status" == "2" ]; then
             # case same version already installed
-            echo $(echo "$http_response" | jq -r '.rows[1].install.rows[0].reportMessage')
+            message=$(echo "$http_response" | jq -r '.rows[1].install.rows[0].reportMessage')
+            log "Success: $message"
         else
             # case install success
-            echo "Success"
+            log "Success: Extension $input_params imported successfully."
         fi
     elif [ "$http_status" -eq 406 ]; then
         if [[ "$http_response" == "Not Acceptable" ]]; then
             # case extension malformed
-            echo "Error: Import extension failed. Not Acceptable."
+            log "Error: Import extension failed. Not Acceptable."
             exit_code=$error_exit_code
         else
             local validate_report_status=$(echo "$http_response" | jq -r '.rows[0].validate.rows[0].extensionReportStatus')
 
             if [ "$validate_report_status" == "1" ]; then
                 # case newer version already installed
-                echo $(echo "$http_response" | jq -r '.rows[0].validate.rows[0].reportMessage')
+                log $(echo "$http_response" | jq -r '.rows[0].validate.rows[0].reportMessage')
                 exit_code=$error_exit_code
             elif [ "$validate_report_status" == "0" ] || [ "$validate_report_status" == "2" ]; then
                 # case ext need server restart. 0 is minor or patch version change. 2 is major version change.
-                echo $(echo "$http_response" | jq -r '.rows[1].install.rows[0].reportMessage')
+                log $(echo "$http_response" | jq -r '.rows[1].install.rows[0].reportMessage')
                 exit_code=$restart_exit_code
             else
                 # default case
-                echo "Error: Couldn't import extension $input_params, unknown error."
+                log "Error: Couldn't import extension $input_params, unknown error."
                 exit_code=$error_exit_code
             fi
         fi     
     elif [ "$http_status" -eq 401 ]; then
-        echo "Error: Couldn't import extension $input_params, can't connect to server."
+        log "Error: Couldn't import extension $input_params, can't connect to server."
         exit_code=$error_exit_code
     elif [ "$http_status" -eq 000 ]; then
-        echo "Error: Couldn't import extension $input_params, server offline."
+        log "Error: Couldn't import extension $input_params, server offline."
         exit_code=$error_exit_code
     else
-        echo "Error: Couldn't import extension $input_params, unknown error."
+        log "Error: Couldn't import extension $input_params, unknown error."
         exit_code=$error_exit_code
     fi
 
@@ -307,9 +335,7 @@ call_service() {
                 OPTION_VALUE="$(echo "$SIMPLE" | sed 's/[[:alnum:]_-]*=//')"
                 OPTION_NAME="$(echo "$SIMPLE" | sed 's/=.*//')"
                 options["$OPTION_NAME"]="$OPTION_VALUE"
-                if [ "$is_verbose" = true ]; then
-                    echo "Parameter '$OPTION_NAME' = '$OPTION_VALUE'"
-                fi
+                log_verbose "Parameter '$OPTION_NAME' = '$OPTION_VALUE'" >> "$logfile_name"
             fi
         done
     fi
@@ -319,9 +345,7 @@ call_service() {
     local service_name=""
 
     IFS="/" read -r entity_type entity_name service_name <<<"$input_params"
-    if [ "$is_verbose" = true ]; then
-        echo "Will call '$TWX_URL/$entity_type/$entity_name/Services/$service_name'"
-    fi
+    log_verbose "Will call '$TWX_URL/$entity_type/$entity_name/Services/$service_name'"
 
     local http_response
 
@@ -350,9 +374,9 @@ call_service() {
     rm -r "response.json"
 
     if [ "$http_status" -eq 200 ]; then
-        echo "$http_body"
+        log "$http_body"
     else
-        echo "Couldn't call $input_params, error: $http_body"
+        log "Error: Couldn't call $input_params, error: $http_body"
         exit_code=$error_exit_code
 
     fi
@@ -439,7 +463,7 @@ execute_code() {
     rm -r "$temp_file_name"
 
     if [ $exit_code -eq 2 ]; then
-        echo "Error importing XML with .js file $js_file_name"
+        log "Error: error importing XML with .js file $js_file_name"
     else
         PARAM_ARRAY=()
         if [ $# -eq 0 ]; then
@@ -455,9 +479,9 @@ execute_code() {
         fi
 
         if [ $exit_code -ne 5 ]; then
-            echo "$call_js_service"
+            log "$call_js_service"
         else
-            echo "Error run .js file $js_file_name. Response: $call_js_service"
+            log "Error; error run .js file $js_file_name. Response: $call_js_service"
         fi
     fi
 
@@ -515,15 +539,13 @@ upload_file() {
 
     if [ -n "$local_file_path" ]; then
         if [ -f "$local_file_path" ]; then 
-            if [ $is_verbose = true ]; then
-                echo "$local_file_path exists."
-            fi
-        else 
-            echo "$local_file_path does not exist."
+            log_verbose "$local_file_path exists."
+        else
+            log "Error: $local_file_path does not exist."
             exit $error_exit_code
         fi
     else
-        echo "Missing upload file path."
+        log "Error: Missing upload file path."
         exit $error_exit_code
     fi
 
@@ -552,11 +574,10 @@ upload_file() {
     fi
 
     if [ "$http_status_code_upload" -eq 200 ]; then
-        if [ $is_verbose = true ]; then
-            echo "Upload success,  http code ${http_status_code_upload}"
-        fi
+        log "Success: Successfully uploaded file $local_file_path"
+        log_verbose " > Upload success,  http code ${http_status_code_upload}"
     else
-        echo "Couldn't upload $local_file_path, http code ${http_status_code_upload}"
+        log "Error: Couldn't upload $local_file_path, http code ${http_status_code_upload}"
         exit_code=$error_exit_code
     fi
 
@@ -578,15 +599,12 @@ download_file() {
         if [[ -d "$2" ]]; then
             download_dir="$2"
         else
-            echo "$2 is not a valid directory"
+            log "Error: $2 is not a valid directory"
             exit $error_exit_code
         fi
     fi
 
-    if [ $is_verbose = true ]; then
-        echo "Downloading file ${base_filename}, filePath ${file_path}, download URL: ${full_url}"
-        echo "Repository ${repository}"
-    fi
+    log_verbose "Downloading file ${base_filename}, filePath ${file_path},repository ${repository}, download URL: ${full_url}"
 
     local http_status_code
 
@@ -607,15 +625,14 @@ download_file() {
     fi
 
     if [ "200" != "${http_status_code}" ]; then
-        echo "Failed to download ${file_path}, with http code ${http_status_code}"
+        log "Error: Failed to download ${file_path}, with http code ${http_status_code}"
         rm -r "$base_filename"
         exit_code=$error_exit_code
     else
-        echo $(pwd)
         if [ -n "$download_dir" ]; then
             mv -f "./$base_filename" "$download_dir"
         fi
-        echo "Successfully downloaded file $file_path"
+        log "Success: Successfully downloaded file $file_path to $(pwd)"
     fi
 
     return ${exit_code}
@@ -644,8 +661,11 @@ help_info() {
 
 Options:
   -v        Verbose mode. Allows user to see detailed information about the 
-            execution of twx commands. Note that the output may contain
-            credentials and parameter values in cleartext.
+            execution of twx commands into a dedicated log file. Note that 
+            the output may contain credentials and parameter values in 
+            cleartext.
+            Ex: twx -v=details.log download SystemRepository/myFile.txt
+                twx -v=execute_details.log call MyThing/Service/Test
     
 Commands:
 
@@ -701,9 +721,10 @@ To get more details check out https://github.com/vilia-fr/twx-cli"
 ################################ MAIN SEQUENCE ################################
 ###############################################################################
 
-if [ "$1" = "-v" ]; then
+# if [ "$1" = "-v" ];
+if [[ "$1" =~ ^-v.*= ]]; then
+    set_verbose 1 $1
     shift
-    set_verbose 1
 else
     set_verbose 0
 fi
