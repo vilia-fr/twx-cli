@@ -23,9 +23,9 @@ exit_code=0
 output=""
 http_option="--silent"
 zip_option="-rq"
-version="1.0.2"
+version="2.0.0"
 use_appkey=0
-logfile_name=""
+log_filename=""
 
 
 ###########################################################################
@@ -51,14 +51,14 @@ create_json_body() {
 log() {
     local message="$1"
     echo "$message"
-    log_verbose "$message"
+    log_to_file "$message"
 }
 
 # Log in file
-log_verbose() {
+log_to_file() {
     local message="$1"
     if [ "$is_verbose" = true ]; then
-        echo "$message" >> "$logfile_name"
+        echo "$message" >> "$log_filename"
     fi
 }
 
@@ -69,25 +69,30 @@ set_verbose() {
 
     if [ "$1" = 1 ]; then
         is_verbose=true
-        # TODO: deactivated as curl verbose is awalys displayed in terminal
+        # deactivated as curl verbose is always displayed in terminal
         # http_option="--verbose"
         http_option="--silent"
         zip_option="-rv"
 
-        base_name=$(echo "$2" | tail -c +4)
-        if [ -z "${base_name}" ]; then
+        verbose_input="$2"
+
+        log_filename=$(echo "$verbose_input" | tail -c +4)
+        if [ -z "${log_filename}" ]; then
             help_info
             exit $error_exit_code
+        elif [ -f "$log_filename" ]; then
+            echo "Error: A file named $log_filename already exists."
+        elif [ -d "$log_filename" ]; then
+            echo "Error: A directory named $log_filename already exists."
         fi
 
-        logfile_name="$base_name"
-        echo "" > "$logfile_name"
+        touch "$log_filename"
     else
         is_verbose=false
         http_option="--silent"
         zip_option="-rq"
 
-        logfile_name=""
+        log_filename=""
     fi
 }
 
@@ -123,7 +128,7 @@ check_configuration() {
     local error_exit_code=2
 
     if ([ -n "$TWX_APPKEY" ] || ([ -n "$TWX_USER" ] && [ -n "$TWX_PASSWORD" ])) && [ -n "$TWX_URL" ]; then
-        log_verbose "Continuing..."
+        log_to_file "Configuration is complete."
     else
         if [ -f ./.thingworx.conf ]; then
             source ./.thingworx.conf
@@ -197,7 +202,7 @@ import() {
         exit_code=$?
 
         if [ $exit_code -eq 5 ]; then
-            log "Error: Couldn't import $input_name, response $import_xml\n"
+            log "Error: Couldn't import $input_name, response $import_xml"
         fi
 
         #Delete folders
@@ -236,7 +241,7 @@ import() {
 
         if [ "$http_status" -eq 200 ]; then
             log "Success: $input_name successfully imported."
-            log_verbose "Import success, http code ${http_status}"
+            log_to_file "Import success, http code ${http_status}"
         else
             log "Error: Couldn't import $input_name, http code ${http_status}"
             exit_code=2
@@ -258,20 +263,20 @@ import_ext() {
 
     if [ $use_appkey -eq "1" ]; then
         http_status=$(
-            MSYS_NO_PATHCONV=1 curl -X POST "$http_option" -o "response-import-ext.json" -w '%{http_code}' -F "file=@$input_params" \
+            MSYS_NO_PATHCONV=1 curl -X POST "$http_option" -o "tmp-response-import-ext.json" -w '%{http_code}' -F "file=@$input_params" \
                 -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" "$url" \
                 -H "appKey:$TWX_APPKEY"       
         )
     else
         http_status=$(
-            MSYS_NO_PATHCONV=1 curl -X POST "$http_option" -o "response-import-ext.json" -w '%{http_code}' -F "file=@$input_params" \
+            MSYS_NO_PATHCONV=1 curl -X POST "$http_option" -o "tmp-response-import-ext.json" -w '%{http_code}' -F "file=@$input_params" \
                 -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" "$url" \
                 -u "$TWX_USER:$TWX_PASSWORD"
         )
     fi    
 
-    local http_response=$(cat response-import-ext.json)
-    rm -r "response-import-ext.json"
+    local http_response=$(cat tmp-response-import-ext.json)
+    rm -r "tmp-response-import-ext.json"
 
     if [ "$http_status" -eq 200 ]; then
         local validate_report_status=$(echo "$http_response" | jq -r '.rows[1].install.rows[0].extensionReportStatus')
@@ -335,7 +340,7 @@ call_service() {
                 OPTION_VALUE="$(echo "$SIMPLE" | sed 's/[[:alnum:]_-]*=//')"
                 OPTION_NAME="$(echo "$SIMPLE" | sed 's/=.*//')"
                 options["$OPTION_NAME"]="$OPTION_VALUE"
-                log_verbose "Parameter '$OPTION_NAME' = '$OPTION_VALUE'" >> "$logfile_name"
+                log_to_file "Parameter '$OPTION_NAME' = '$OPTION_VALUE'"
             fi
         done
     fi
@@ -345,7 +350,7 @@ call_service() {
     local service_name=""
 
     IFS="/" read -r entity_type entity_name service_name <<<"$input_params"
-    log_verbose "Will call '$TWX_URL/$entity_type/$entity_name/Services/$service_name'"
+    log_to_file "Will call '$TWX_URL/$entity_type/$entity_name/Services/$service_name'"
 
     local http_response
 
@@ -539,7 +544,7 @@ upload_file() {
 
     if [ -n "$local_file_path" ]; then
         if [ -f "$local_file_path" ]; then 
-            log_verbose "$local_file_path exists."
+            log_to_file "$local_file_path exists."
         else
             log "Error: $local_file_path does not exist."
             exit $error_exit_code
@@ -575,7 +580,7 @@ upload_file() {
 
     if [ "$http_status_code_upload" -eq 200 ]; then
         log "Success: Successfully uploaded file $local_file_path"
-        log_verbose " > Upload success,  http code ${http_status_code_upload}"
+        log_to_file " > Upload success,  http code ${http_status_code_upload}"
     else
         log "Error: Couldn't upload $local_file_path, http code ${http_status_code_upload}"
         exit_code=$error_exit_code
@@ -604,7 +609,7 @@ download_file() {
         fi
     fi
 
-    log_verbose "Downloading file ${base_filename}, filePath ${file_path},repository ${repository}, download URL: ${full_url}"
+    log_to_file "Downloading file ${base_filename}, filePath ${file_path},repository ${repository}, download URL: ${full_url}"
 
     local http_status_code
 
@@ -639,12 +644,27 @@ download_file() {
 }
 
 config_info() {
+    local app_key=""
+    local password=""
+
+    if [ ! -z "${TWX_APPKEY}" ]; then
+        appkey_prefix=$(echo "$TWX_APPKEY" | head -c +2)
+        appkey_suffix=$(echo "$TWX_APPKEY" | tail -c -3)
+        app_key="$appkey_prefix*******$appkey_suffix"
+    fi
+
+    if [ ! -z "${TWX_PASSWORD}" ]; then
+        pwd_prefix=$(echo "$TWX_PASSWORD" | head -c +2)
+        pwd_suffix=$(echo "$TWX_PASSWORD" | tail -c -3)
+        password="$pwd_prefix*******$pwd_suffix"
+    fi  
+
     echo "--- Current Thingworx configuration : "
     echo
     echo " > TWX_URL: $TWX_URL"
-    echo " > TWX_APPKEY: $TWX_APPKEY"
+    echo " > TWX_APPKEY: $app_key"
     echo " > TWX_USER: $TWX_USER"
-    echo " > TWX_PASSWORD: *******"
+    echo " > TWX_PASSWORD: $password"
 }
 
 version_info() {
@@ -660,9 +680,10 @@ help_info() {
     echo "Unofficial ThingWorx command line utilities
 
 Options:
-  -v        Verbose mode. Allows user to see detailed information about the 
-            execution of twx commands into a dedicated log file. Note that 
-            the output may contain credentials and parameter values in 
+
+  -v        Verbose mode. Allows user to stream detailed information about 
+            the execution of twx commands into a dedicated log file. Note 
+            that the output may contain credentials and parameter values in 
             cleartext.
             Ex: twx -v=details.log download SystemRepository/myFile.txt
                 twx -v=execute_details.log call MyThing/Service/Test
