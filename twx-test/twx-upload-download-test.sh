@@ -21,4 +21,4 @@ if [ $? -eq 7 ]; then
     rm ./test-upload.txt
 fi
 
-printf "Test 6 - Upload-Download tests completed ${GREEN}successfully${NC}\n"
+printf "Test 6: Upload-Download tests completed ${GREEN}successfully${NC}\n"
