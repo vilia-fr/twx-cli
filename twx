@@ -80,10 +80,8 @@ set_verbose() {
         if [ -z "${log_filename}" ]; then
             help_info
             exit $error_exit_code
-        elif [ -f "$log_filename" ]; then
-            echo "Error: A file named $log_filename already exists."
         elif [ -d "$log_filename" ]; then
-            echo "Error: A directory named $log_filename already exists."
+            echo "Error: A directory named $log_filename already exists"
         fi
 
         touch "$log_filename"
@@ -100,8 +98,6 @@ set_verbose() {
 check_mandatory_tools() {
     local exit_code=0
     local error_exit_code=1
-
-    # mention in readme all the mandatory tools + link to get them/install + clarify why.where its neeedd
     local tools=("curl" "zip" "unzip" "jq")
     local not_installed_tools=()
 
