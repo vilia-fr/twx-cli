@@ -298,6 +298,46 @@ cd ~/Downloads/data
 ls -al
 ```
 
+### Verbose logging
+
+You can use `-v` flag to append verbose logs to provided file, for example:
+
+```bash
+twx -v=deployment.log call Resources/EntityServices/CreateThing -pname=MyThing -pthingTemplateName=GenericThing
+```
+
+If you pass secrets through parameters, you can sanitize them from the log like this:
+
+```bash
+twx -v=deployment.log call Things/MyDeploymentThing/InitializeDatabase \
+  -pusername="thingworx" \
+  -ppassword="$DB_PASSWORD" \
+  -secret="$DB_PASSWORD"
+```
+
+This will replace `$DB_PASSWORD` in `deployment.log` with asterisks `********`. Resulting log file:
+
+```
+Parameter 'username' = 'thingworx'
+Parameter 'password' = '******* (redacted)'
+Will call 'http://192.168.0.24:8080/Thingworx/Things/MyDeploymentThing/Services/InitializeDatabase'
+```
+
+It also works with substrings, thus it handles JSON parameters correctly. For example:
+
+```bash
+twx -v=deployment.log call Things/MyDeploymentThing/InitializeDatabase \
+  -pconfig="{\"username\": \"thingworx\", \"password\": \"$DB_PASSWORD\"}" \
+  -secret="$DB_PASSWORD"
+```
+
+Resulting log file:
+
+```
+Parameter 'config' = '{"username": "thingworx", "password": "******* (redacted)"}'
+Will call 'http://192.168.0.24:8080/Thingworx/Things/MyDeploymentThing/Services/InitializeDatabase'
+```
+
 ## Changelogs
 
 ### 1.0.1
