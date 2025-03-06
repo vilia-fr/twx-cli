@@ -328,14 +328,26 @@ call_service() {
     shift
 
     declare -A options
+    declare -A secrets
 
     if [ $# -gt 0 ]; then
+        for i in "$@"; do
+            if [[ $i =~ ^-secret=.* ]]; then
+                SECRET_VALUE=$(echo "$i" | tail -c +9 | sed -e 's/[]\/$*.^[]/\\&/g')
+                secrets["$SECRET_VALUE"]="secret"
+            fi
+        done
         for i in "$@"; do
             if [[ $i =~ ^-p.*= ]]; then
                 SIMPLE=$(echo "$i" | tail -c +3)
                 OPTION_VALUE="$(echo "$SIMPLE" | sed 's/[[:alnum:]_-]*=//')"
                 OPTION_NAME="$(echo "$SIMPLE" | sed 's/=.*//')"
                 options["$OPTION_NAME"]="$OPTION_VALUE"
+
+                # Sanitize output for secrets
+                for secret in "${!secrets[@]}"; do
+                    OPTION_VALUE="${OPTION_VALUE//$secret/******* \(redacted\)}"
+                done
                 log_to_file "Parameter '$OPTION_NAME' = '$OPTION_VALUE'"
             fi
         done
@@ -698,8 +710,10 @@ Commands:
             service response into STDOUT.
             Parameter syntax: <EntityType>/<EntityName>/ServiceName 
                               -p<ParamName>=<ParamValue>
+                              -secret=<ParamValue>
             Ex.: twx call Resources/EntityServices/CreateThing 
                           -pname=MyThing -pthingTemplateName=GenericThing
+                          -ppassword=\"\$pass\" -secret=\"\$pass\"
     
   eval      Execute a JavaScript code snippet in ThingWorx
             Accepts a filename and an optional -p<ParamName>=<ParamValue>
