@@ -16,9 +16,19 @@ ThingWorx is a registered trademark of PTC Inc.
 
 ## Install and configure
 
-Install prerequisites: `curl`, `bash`, `zip`, `unzip` and `jq`.
+### Software
 
-On Windows, this tool has been tested and validated using Git Bash.
+Install prerequisites on *nix: `curl`, `bash`, `zip`, `unzip` and `jq`.
+
+Install prerequisites on Windows: MINGW64 (bundles `bash`, `curl` and `unzip`) and `jq`. It also  uses 
+`/c/Windows/System32/tar.exe`, which comes with all recent Windows versions, instead of `zip`. In other
+words, if you want to use this on Windows, **all you need to do is install `jq`**, for example via 
+WinGet: `winget install -e --id jqlang.jq` (this works out-of-the-box and does not require admin 
+permissions). As for MINGW, on Windows, this tool has been tested and validated using **Git Bash**.
+
+WSL should also work, but will require installing *nix prerequisites mentioned above.
+
+### Configuration
 
 Create a file `~/.thingworx.conf` (on Windows `~/` is the user's home directory), or
 `.thingworx.conf` file in your local folder. If no local config is found, then the global 

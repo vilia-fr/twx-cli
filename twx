@@ -2,6 +2,7 @@
 
 #  TWX CLI - Unofficial ThingWorx command line utilities
 #  Copyright (c) 2023 Geoffrey Espagne
+#  Copyright (c) 2026 Constantine Kulak
 #
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -22,8 +23,7 @@
 exit_code=0
 output=""
 http_option="--silent"
-zip_option="-rq"
-version="2.0.0"
+version="2.2.0"
 use_appkey=0
 log_filename=""
 
@@ -72,8 +72,6 @@ set_verbose() {
         # deactivated as curl verbose is always displayed in terminal
         # http_option="--verbose"
         http_option="--silent"
-        zip_option="-rv"
-
         verbose_input="$2"
 
         log_filename=$(echo "$verbose_input" | tail -c +4)
@@ -88,8 +86,6 @@ set_verbose() {
     else
         is_verbose=false
         http_option="--silent"
-        zip_option="-rq"
-
         log_filename=""
     fi
 }
@@ -98,7 +94,13 @@ set_verbose() {
 check_mandatory_tools() {
     local exit_code=0
     local error_exit_code=1
-    local tools=("curl" "zip" "unzip" "jq")
+    local tools=("curl" "jq")
+	if [[ "$OSTYPE" == "msys" ]]; then
+		# On Windows zip/unzip can be done via tar with non-GNU extensions
+		tools+=('/c/Windows/System32/tar.exe')
+	else
+		tools+=('zip')
+	fi
     local not_installed_tools=()
 
     for tool in "${tools[@]}"; do
@@ -130,7 +132,7 @@ check_configuration() {
             source ./.thingworx.conf
         elif [ -f ~/.thingworx.conf ]; then
             source ~/.thingworx.conf
-        else 
+        else
             log "Error: No configuration file detected."
             exit $error_exit_code
         fi
@@ -152,7 +154,29 @@ check_configuration() {
         use_appkey=1
     fi
 
-    return ${exit_code} 
+    return ${exit_code}
+}
+
+pack() {
+	local zip_filename="$1"
+	local input_dir="$2"
+	if [[ "$OSTYPE" == "msys" ]]; then
+		local tar_option=""
+		if [ "$is_verbose" = true ]; then
+			tar_option="-cvaf"
+		else
+			tar_option="-caf"
+		fi
+		/c/Windows/System32/tar.exe "$tar_option" "$zip_filename" "$input_dir"
+	else
+		local zip_option=""
+		if [ "$is_verbose" = true ]; then
+			zip_option="-rv"
+		else
+			zip_option="-rq"
+		fi
+		zip "$zip_option" "$zip_filename" "$input_dir"
+	fi
 }
 
 ###########################################################################
@@ -170,7 +194,7 @@ import() {
         local zip_name="$(basename "$tmp_zip" | sed 's/^tmp\.//' | sed 's/\.zip$//')"
         local tmp_zip="$zip_name.zip"
 
-        zip "$zip_option" "$tmp_zip" "$input_name"
+        pack "$tmp_zip" "$input_name"
 
         local folder_name="tmp-${zip_name}"
 
@@ -181,7 +205,7 @@ import() {
 
         if [ $exit_code -eq 6 ]; then
             log "Error: Couldn't upload $tmp_zip,"
-            exit "$exit_code" 
+            exit "$exit_code"
         fi
 
         #Extract zip
@@ -231,7 +255,7 @@ import() {
                     -u "$TWX_USER:$TWX_PASSWORD" \
                     -w 'HTTPSTATUS:%{http_code}' "$url"
             )
-        fi        
+        fi
 
         local http_status=$(echo "$http_code_response" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
 
@@ -261,7 +285,7 @@ import_ext() {
         http_status=$(
             MSYS_NO_PATHCONV=1 curl -X POST "$http_option" -o "tmp-response-import-ext.json" -w '%{http_code}' -F "file=@$input_params" \
                 -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" "$url" \
-                -H "appKey:$TWX_APPKEY"       
+                -H "appKey:$TWX_APPKEY"
         )
     else
         http_status=$(
@@ -269,7 +293,7 @@ import_ext() {
                 -H "X-XSRF-TOKEN:TWX-XSRF-TOKEN-VALUE" "$url" \
                 -u "$TWX_USER:$TWX_PASSWORD"
         )
-    fi    
+    fi
 
     local http_response=$(cat tmp-response-import-ext.json)
     rm -r "tmp-response-import-ext.json"
@@ -306,7 +330,7 @@ import_ext() {
                 log "Error: Couldn't import extension $input_params, unknown error."
                 exit_code=$error_exit_code
             fi
-        fi     
+        fi
     elif [ "$http_status" -eq 401 ]; then
         log "Error: Couldn't import extension $input_params, can't connect to server."
         exit_code=$error_exit_code
@@ -507,7 +531,7 @@ build_ext() {
     local exit_code=0
     local error_exit_code=8
 
-    if [$# -ne 3]; then 
+    if [ $# -ne 3 ]; then
         exit_code=$error_exit_code
         return ${exit_code}
     fi
@@ -531,9 +555,9 @@ build_ext() {
     echo "$metadata_template" > "$temp_build_dir/metadata.xml"
     cp -r "$ext_src_dir/." "$temp_build_dir/Entities/"
     pushd "$temp_build_dir"
-    zip "$zip_option" "$ext_zip_name" "."
+    pack "../$ext_zip_name" "."
     popd
-    mv "$temp_build_dir/$ext_zip_name" "."
+    mv "$temp_build_dir/../$ext_zip_name" .
     rm -r "$temp_build_dir"
 
     return ${exit_code}
@@ -551,7 +575,7 @@ upload_file() {
     local local_file_path="$2"
 
     if [ -n "$local_file_path" ]; then
-        if [ -f "$local_file_path" ]; then 
+        if [ -f "$local_file_path" ]; then
             log_to_file "$local_file_path exists."
         else
             log "Error: $local_file_path does not exist."
@@ -665,7 +689,7 @@ config_info() {
         pwd_prefix=$(echo "$TWX_PASSWORD" | head -c +2)
         pwd_suffix=$(echo "$TWX_PASSWORD" | tail -c -3)
         password="$pwd_prefix*******$pwd_suffix"
-    fi  
+    fi
 
     echo "--- Current Thingworx configuration : "
     echo
@@ -689,32 +713,32 @@ help_info() {
 
 Options:
 
-  -v        Verbose mode. Allows user to stream detailed information about 
-            the execution of twx commands into a dedicated log file. Note 
-            that the output may contain credentials and parameter values in 
+  -v        Verbose mode. Allows user to stream detailed information about
+            the execution of twx commands into a dedicated log file. Note
+            that the output may contain credentials and parameter values in
             cleartext.
             Ex: twx -v=details.log download SystemRepository/myFile.txt
                 twx -v=execute_details.log call MyThing/Service/Test
-    
+
 Commands:
 
   import    Import an extension, a single or multiple entities
             Accepts an .xml file, a .zip file or a directory
             Ex.: twx import entity.xml  # Imports a single entity
                  twx import ext.zip     # Imports an extension
-                 twx import ./Entities  # Zips and imports Source Control 
+                 twx import ./Entities  # Zips and imports Source Control
                                           entities from a directory
 
   call      Call a service on a ThingWorx entity. Returns exit code 5 if
-            the service returns something other than HTTP 200. Echoes the 
+            the service returns something other than HTTP 200. Echoes the
             service response into STDOUT.
-            Parameter syntax: <EntityType>/<EntityName>/ServiceName 
+            Parameter syntax: <EntityType>/<EntityName>/ServiceName
                               -p<ParamName>=<ParamValue>
                               -secret=<ParamValue>
-            Ex.: twx call Resources/EntityServices/CreateThing 
+            Ex.: twx call Resources/EntityServices/CreateThing
                           -pname=MyThing -pthingTemplateName=GenericThing
                           -ppassword=\"\$pass\" -secret=\"\$pass\"
-    
+
   eval      Execute a JavaScript code snippet in ThingWorx
             Accepts a filename and an optional -p<ParamName>=<ParamValue>
             If no filename is provided, the script body is taken from STDIN.
@@ -722,18 +746,18 @@ Commands:
                  echo 'logger.info(msg)' | twx eval -pmsg='Hello, world!'
 
   build     Build a ThingWorx extension as zip file with metadata
-            Accepts a directory path, an extension name and a 
-            version number. The zip file will be created in the current 
+            Accepts a directory path, an extension name and a
+            version number. The zip file will be created in the current
             folder.
             Ex.: twx build ./twx-src myExtension [1.0.8]
-    
+
   upload    Upload a single file to a File Repository
             Parameter syntax: <FileRepository>[/<filePath>] <localFile>
             If a remote path does not exist -- it gets created recursively.
             WARNING: Existing remote files are overwritten silently.
             Ex.: twx upload SystemRepository/docs README.md
                  twx upload SystemRepository root-data.txt
-    
+
   download  Download a single file from Thingworx repository
             Parameter syntax: <FileRepository>/<filePath> [<localDirectory>]
             WARNING: Existing local files are overwritten silently.
@@ -744,7 +768,7 @@ Commands:
             WARNING: The output includes the appkey in clear text.
 
   version   Display current ThingWorx CLI version
-            
+
 To get more details check out https://github.com/vilia-fr/twx-cli"
 }
 
@@ -797,7 +821,7 @@ elif [ "$1" == "version" ]; then
     version_info
 elif [ "$#" -eq 0 ]; then
     help_info
-else 
+else
     help_info
 fi
 
