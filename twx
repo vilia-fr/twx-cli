@@ -95,7 +95,7 @@ check_mandatory_tools() {
     local exit_code=0
     local error_exit_code=1
     local tools=("curl" "jq")
-	if [[ "$OSTYPE" == "msys" ]]; then
+	if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win" ]]; then
 		# On Windows zip/unzip can be done via tar with non-GNU extensions
 		tools+=('/c/Windows/System32/tar.exe')
 	else
@@ -160,7 +160,7 @@ check_configuration() {
 pack() {
 	local zip_filename="$1"
 	local input_dir="$2"
-	if [[ "$OSTYPE" == "msys" ]]; then
+	if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win" ]]; then
 		local tar_option=""
 		if [ "$is_verbose" = true ]; then
 			tar_option="-cvaf"
